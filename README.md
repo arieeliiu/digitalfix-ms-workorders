@@ -1,5 +1,12 @@
 # DigitalFix — Workorders
 
+## Integración con BFF
+
+GET /api/workorders acepta el parámetro interno solicitanteId para filtrar en
+Oracle. El BFF deriva ese valor y el solicitante de creación del JWT validado,
+y verifica propiedad en la consulta individual. Workorders aún no valida JWT:
+mantenerlo en la red privada de Docker, sin publicar su puerto al exterior.
+
 Microservicio para crear y consultar órdenes de mantenimiento eléctrico.
 
 ## Integrantes

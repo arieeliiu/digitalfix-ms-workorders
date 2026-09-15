@@ -43,4 +43,8 @@ public class OrdenTrabajoServicio {
     public List<OrdenTrabajo> listarOrdenes() {
         return repositorio.findAll();
     }
+
+    public List<OrdenTrabajo> listarOrdenesDelSolicitante(String solicitanteId) {
+        return repositorio.findBySolicitanteId(solicitanteId);
+    }
 }

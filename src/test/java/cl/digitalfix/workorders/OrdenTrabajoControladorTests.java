@@ -38,6 +38,15 @@ class OrdenTrabajoControladorTests {
     private OrdenTrabajoRepositorio repositorio;
 
     @Test
+    void filtraOrdenesPorSolicitanteEnRepositorio() throws Exception {
+        when(repositorio.findBySolicitanteId("usuario-prueba")).thenReturn(List.of(ordenEjemplo()));
+        cliente.perform(get("/api/workorders").param("solicitanteId", "usuario-prueba"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].solicitanteId").value("usuario-prueba"));
+        verify(repositorio).findBySolicitanteId("usuario-prueba");
+    }
+
+    @Test
     void crearOrdenRetorna201() throws Exception {
         when(repositorio.save(any(OrdenTrabajo.class)))
             .thenAnswer(llamada -> llamada.getArgument(0));
