@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Configuración local y evidencias sensibles
+.env
+.env.*
+!.env.example
+*.log

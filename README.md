@@ -24,7 +24,9 @@ Definir estas variables de entorno antes de iniciar:
 
 | Variable | Contenido |
 |---|---|
-| DB_URL | URL JDBC de Oracle |
+| DB_HOST | Endpoint Oracle RDS |
+| DB_PORT | Puerto, por defecto 1521 |
+| DB_SERVICE | Service name, por defecto ORCL |
 | DB_USERNAME | Usuario de la base de datos |
 | DB_PASSWORD | Contraseña del usuario |
 
@@ -54,7 +56,7 @@ Durante el desarrollo, Hibernate actualiza el esquema mediante
 | GET | /api/workorders/{id} | Consulta una orden; responde 200 o 404 |
 | GET | /api/workorders | Lista las órdenes; responde 200 |
 
-Ejemplo de creación:
+Ejemplo de creación interna (solo BFF, nunca desde Angular):
 
 ```json
 {
@@ -74,21 +76,16 @@ Los campos inválidos reciben una respuesta 400.
 .\mvnw.cmd verify
 ```
 
-Las pruebas automatizadas cubren creación, consulta, listado y errores
-de validación, utilizando un repositorio simulado.
-La prueba inicial de contexto requiere acceso a Oracle y sus variables.
+Las pruebas automatizadas cubren controlador/validación con repositorio simulado,
+contexto con H2 y persistencia JPA real en H2 en disco al cerrar/reabrir la aplicación.
+No requieren credenciales Oracle. La demostración Oracle RDS después de reiniciar
+el contenedor debe repetirse con este despliegue y usuarios reales.
 
-Se comprobó manualmente la creación y recuperación de una orden
-desde Oracle RDS después de reiniciar el servicio.
+## Despliegue integrado
 
-## Integración pendiente
+El BFF comprueba Catalog, obtiene oid del JWT y limita consultas a órdenes propias.
+Workorders recibe solicitanteId únicamente por la red Docker de confianza.
+No valida tokens por sí mismo y no debe publicar 8082.
 
-- Comprobar el servicio solicitado contra Catalog.
-- Obtener el solicitante desde la identidad autenticada.
-- Restringir las consultas de Cliente a sus propias órdenes.
-- Integrar con el BFF y API Gateway.
-- Desplegar mediante Docker en EC2.
-
-Actualmente, solicitanteId se recibe para pruebas internas.
-El servicio todavía no implementa autenticación ni autorización y
-no debe exponerse públicamente sin controles de acceso.
+Ver [guía completa](../digitalfix-ms-bff/DEPLOYMENT.md) y
+[resultados de validación](../digitalfix-ms-bff/VERIFICATION.md).
