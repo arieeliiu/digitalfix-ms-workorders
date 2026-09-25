@@ -9,6 +9,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.JoinColumn;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "ordenes_trabajo")
@@ -21,6 +27,13 @@ public class OrdenTrabajo {
     // Referencia lógica al catálogo, sin relación JPA entre microservicios.
     @Column(name = "servicio_id", nullable = false)
     private Long servicioId;
+
+    @ElementCollection
+    @CollectionTable(
+        name = "orden_repuestos",
+        joinColumns = @JoinColumn(name = "orden_id")
+    )
+    private List<RepuestoOrden> repuestos = new ArrayList<>();
 
     @Column(nullable = false, length = 1000)
     private String descripcion;
@@ -73,6 +86,16 @@ public class OrdenTrabajo {
         registrarCambio(actor);
     }
 
+    public void actualizarRepuestos(List<RepuestoOrden> repuestos, String actor) {
+        this.repuestos.clear();
+
+        if (repuestos != null) {
+            this.repuestos.addAll(repuestos);
+        }
+
+        registrarCambio(actor);
+    }
+
     public void cambiarEstado(EstadoOrden estado, String tecnicoId, String actor) {
         this.estado = estado.name();
         this.tecnicoId = tecnicoId;
@@ -114,5 +137,9 @@ public class OrdenTrabajo {
 
     public String getEstado() {
         return estado;
+    }
+
+    public List<RepuestoOrden> getRepuestos() {
+        return repuestos;
     }
 }
