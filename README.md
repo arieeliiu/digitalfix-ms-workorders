@@ -2,12 +2,13 @@
 
 ## Integración con BFF
 
-GET /api/workorders acepta el parámetro interno solicitanteId para filtrar en
-Oracle. El BFF deriva ese valor y el solicitante de creación del JWT validado,
-y verifica propiedad en la consulta individual. Workorders aún no valida JWT:
-mantenerlo en la red privada de Docker, sin publicar su puerto al exterior.
+GET /api/workorders acepta el parámetro interno `solicitanteId` para filtrar en Oracle.
 
-Microservicio para crear y consultar órdenes de mantenimiento eléctrico.
+El BFF deriva ese valor desde el JWT validado y también obtiene desde el token el solicitante utilizado al crear órdenes.
+
+Workorders recibe estas llamadas únicamente desde la red interna y no debe exponerse directamente al exterior.
+
+Microservicio encargado de administrar órdenes de mantenimiento eléctrico.
 
 ## Integrantes
 
@@ -16,7 +17,11 @@ Microservicio para crear y consultar órdenes de mantenimiento eléctrico.
 
 ## Tecnologías
 
-Java 21, Spring Boot 4.1.1, Maven, Spring Data JPA y Oracle Database en Amazon RDS.
+- Java 21
+- Spring Boot 4.1.1
+- Maven
+- Spring Data JPA
+- Oracle Database en Amazon RDS
 
 ## Configuración
 
@@ -38,9 +43,13 @@ jdbc:oracle:thin:@//HOST:1521/SERVICIO
 
 No guardar credenciales en el repositorio.
 
-El servicio utiliza el puerto 8082.
-Durante el desarrollo, Hibernate actualiza el esquema mediante
-`spring.jpa.hibernate.ddl-auto=update`.
+El servicio utiliza el puerto `8082`.
+
+Durante el desarrollo, Hibernate actualiza el esquema mediante:
+
+```text
+spring.jpa.hibernate.ddl-auto=update
+```
 
 ## Ejecución
 
@@ -55,8 +64,11 @@ Durante el desarrollo, Hibernate actualiza el esquema mediante
 | POST | /api/workorders | Crea una orden; responde 201 |
 | GET | /api/workorders/{id} | Consulta una orden; responde 200 o 404 |
 | GET | /api/workorders | Lista las órdenes; responde 200 |
+| PUT | /api/workorders/{id} | Actualiza una orden creada |
+| PUT | /api/workorders/{id}/status | Cambia el estado de una orden |
+| DELETE | /api/workorders/{id} | Elimina una orden creada o cancelada |
 
-Ejemplo de creación interna (solo BFF, nunca desde Angular):
+Ejemplo de creación interna desde el BFF:
 
 ```json
 {
@@ -67,8 +79,90 @@ Ejemplo de creación interna (solo BFF, nunca desde Angular):
 }
 ```
 
-El servidor genera el identificador, la fecha y el estado inicial CREADA.
-Los campos inválidos reciben una respuesta 400.
+El servidor genera automáticamente:
+
+- identificador;
+- fecha de creación;
+- estado inicial `CREADA`.
+
+Los campos inválidos reciben una respuesta `400 Bad Request`.
+
+## Estados de una orden
+
+El flujo implementado considera:
+
+```text
+CREADA
+→ ASIGNADA
+→ EN_DESPLAZAMIENTO
+→ EN_EJECUCION
+→ CERRADA
+```
+
+Una orden también puede pasar a:
+
+```text
+CANCELADA
+```
+
+No se permite avanzar a estados posteriores sin haber asignado previamente un técnico.
+
+## Repuestos asociados a una orden
+
+Una orden puede almacenar los repuestos que serán utilizados durante el trabajo.
+
+Cada repuesto asociado se registra mediante:
+
+```text
+repuestoId
+cantidad
+```
+
+Ejemplo al asignar una orden:
+
+```json
+{
+  "status": "ASIGNADA",
+  "tecnicoId": "tecnico-01",
+  "repuestos": [
+    {
+      "repuestoId": 4,
+      "cantidad": 2
+    },
+    {
+      "repuestoId": 7,
+      "cantidad": 1
+    }
+  ]
+}
+```
+
+Workorders almacena únicamente:
+
+- el identificador del repuesto;
+- la cantidad utilizada.
+
+El nombre, descripción y stock del repuesto pertenecen a `ms-digitalfix-catalog`.
+
+La relación se persiste asociada a la orden en la tabla:
+
+```text
+orden_repuestos
+```
+
+## Integración de stock pendiente
+
+Actualmente Workorders puede almacenar los repuestos asociados a una orden, pero todavía no realiza la coordinación completa de stock con Catalog.
+
+Queda pendiente implementar:
+
+- verificar que el repuesto exista en Catalog;
+- verificar que exista stock suficiente;
+- descontar el stock cuando la orden pase a `ASIGNADA`;
+- evitar stock negativo;
+- evitar descuentos duplicados para una misma orden.
+
+Esta lógica se implementará mediante integración entre `ms-digitalfix-workorders` y `ms-digitalfix-catalog`.
 
 ## Verificación
 
@@ -76,16 +170,30 @@ Los campos inválidos reciben una respuesta 400.
 .\mvnw.cmd verify
 ```
 
-Las pruebas automatizadas cubren controlador/validación con repositorio simulado,
-contexto con H2 y persistencia JPA real en H2 en disco al cerrar/reabrir la aplicación.
-No requieren credenciales Oracle. La demostración Oracle RDS después de reiniciar
-el contenedor debe repetirse con este despliegue y usuarios reales.
+Las pruebas automatizadas cubren controlador y validaciones, contexto con H2 y persistencia JPA.
+
+Además, se verificó que la incorporación de repuestos asociados a una orden compile correctamente sin afectar las pruebas existentes.
+
+No requieren credenciales Oracle.
+
+La comprobación real contra Oracle RDS debe repetirse después de desplegar esta versión.
 
 ## Despliegue integrado
 
-El BFF comprueba Catalog, obtiene oid del JWT y limita consultas a órdenes propias.
-Workorders recibe solicitanteId únicamente por la red Docker de confianza.
-No valida tokens por sí mismo y no debe publicar 8082.
+Workorders funciona como microservicio interno.
 
-Ver [guía completa](../digitalfix-ms-bff/DEPLOYMENT.md) y
-[resultados de validación](../digitalfix-ms-bff/VERIFICATION.md).
+El flujo esperado es:
+
+```text
+Frontend
+→ API Gateway
+→ BFF
+→ Workorders
+→ Oracle RDS
+```
+
+Catalog y Workorders se comunican dentro de la infraestructura interna para coordinar funcionalidades de dominio.
+
+Workorders no debe publicar directamente el puerto `8082` hacia Internet.
+
+La orquestación del despliegue se gestiona desde `digitalfix-infra`.

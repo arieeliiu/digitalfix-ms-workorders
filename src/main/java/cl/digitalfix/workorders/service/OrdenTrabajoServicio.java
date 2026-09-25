@@ -13,6 +13,7 @@ import cl.digitalfix.workorders.dto.CambiarEstadoSolicitud;
 import cl.digitalfix.workorders.entity.EstadoOrden;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
+import cl.digitalfix.workorders.entity.RepuestoOrden;
 
 @Service
 @Transactional(readOnly = true)
@@ -70,10 +71,28 @@ public class OrdenTrabajoServicio {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Transición de estado no permitida");
         }
         String tecnico = orden.getTecnicoId();
-        if (siguiente == EstadoOrden.ASIGNADA && datos.tecnicoId() != null) {
-            tecnico = datos.tecnicoId().trim();
-        } else if (datos.tecnicoId() != null && !datos.tecnicoId().trim().equals(tecnico)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El técnico se modifica al asignar la orden");
+
+        if (siguiente == EstadoOrden.ASIGNADA) {
+
+            if (datos.tecnicoId() != null) {
+                tecnico = datos.tecnicoId().trim();
+            }
+
+            var repuestos = datos.repuestos() == null
+                    ? List.<RepuestoOrden>of()
+                    : datos.repuestos().stream()
+                        .map(r -> new RepuestoOrden(r.repuestoId(), r.cantidad()))
+                        .toList();
+
+            orden.actualizarRepuestos(repuestos, solicitanteId);
+
+        } else if (datos.tecnicoId() != null
+                && !datos.tecnicoId().trim().equals(tecnico)) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "El técnico se modifica al asignar la orden"
+            );
         }
         if (siguiente != EstadoOrden.CREADA && siguiente != EstadoOrden.CANCELADA
                 && (tecnico == null || tecnico.isBlank())) {
