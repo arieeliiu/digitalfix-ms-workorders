@@ -14,15 +14,21 @@ import cl.digitalfix.workorders.entity.EstadoOrden;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
 import cl.digitalfix.workorders.entity.RepuestoOrden;
+import cl.digitalfix.workorders.client.CatalogCliente;
 
 @Service
 @Transactional(readOnly = true)
 public class OrdenTrabajoServicio {
 
     private final OrdenTrabajoRepositorio repositorio;
+    private final CatalogCliente catalogCliente;
 
-    public OrdenTrabajoServicio(OrdenTrabajoRepositorio repositorio) {
+    public OrdenTrabajoServicio(
+            OrdenTrabajoRepositorio repositorio,
+            CatalogCliente catalogCliente) {
+
         this.repositorio = repositorio;
+        this.catalogCliente = catalogCliente;
     }
 
     @Transactional
@@ -63,13 +69,27 @@ public class OrdenTrabajoServicio {
     }
 
     @Transactional
-    public OrdenTrabajo cambiarEstado(Long id, CambiarEstadoSolicitud datos, String solicitanteId) {
+    public OrdenTrabajo cambiarEstado(
+            Long id,
+            CambiarEstadoSolicitud datos,
+            String solicitanteId) {
+
         var orden = ordenPropiaParaModificar(id, solicitanteId);
         var actual = EstadoOrden.valueOf(orden.getEstado());
         var siguiente = datos.status();
+
         if (!actual.permite(siguiente)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Transición de estado no permitida");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Transición de estado no permitida");
         }
+
+        // Un reintento del mismo estado no debe volver a modificar repuestos
+        // ni volver a descontar stock.
+        if (actual == siguiente) {
+            return orden;
+        }
+
         String tecnico = orden.getTecnicoId();
 
         if (siguiente == EstadoOrden.ASIGNADA) {
@@ -78,28 +98,59 @@ public class OrdenTrabajoServicio {
                 tecnico = datos.tecnicoId().trim();
             }
 
-            var repuestos = datos.repuestos() == null
-                    ? List.<RepuestoOrden>of()
-                    : datos.repuestos().stream()
-                        .map(r -> new RepuestoOrden(r.repuestoId(), r.cantidad()))
-                        .toList();
+            if (tecnico == null || tecnico.isBlank()) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Debes asignar un técnico");
+            }
 
-            orden.actualizarRepuestos(repuestos, solicitanteId);
+            var repuestosSolicitud = datos.repuestos() == null
+                    ? List.<cl.digitalfix.workorders.dto.RepuestoOrdenSolicitud>of()
+                    : datos.repuestos();
 
-        } else if (datos.tecnicoId() != null
-                && !datos.tecnicoId().trim().equals(tecnico)) {
+            // Si la orden no utiliza repuestos, no se llama a Catalog porque
+            // su endpoint de descuento requiere al menos uno.
+            if (!repuestosSolicitud.isEmpty()) {
+                catalogCliente.descontarStock(
+                        orden.getId(),
+                        repuestosSolicitud);
+            }
 
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "El técnico se modifica al asignar la orden"
-            );
+            var repuestos = repuestosSolicitud.stream()
+                    .map(r -> new RepuestoOrden(
+                            r.repuestoId(),
+                            r.cantidad()))
+                    .toList();
+
+            orden.actualizarRepuestos(
+                    repuestos,
+                    solicitanteId);
+
+        } else {
+
+            if (datos.tecnicoId() != null
+                    && !datos.tecnicoId().trim().equals(tecnico)) {
+
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "El técnico se modifica al asignar la orden");
+            }
+
+            if (siguiente != EstadoOrden.CREADA
+                    && siguiente != EstadoOrden.CANCELADA
+                    && (tecnico == null || tecnico.isBlank())) {
+
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Debes asignar un técnico");
+            }
         }
-        if (siguiente != EstadoOrden.CREADA && siguiente != EstadoOrden.CANCELADA
-                && (tecnico == null || tecnico.isBlank())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes asignar un técnico");
-        }
-        if (actual == siguiente && java.util.Objects.equals(tecnico, orden.getTecnicoId())) return orden;
-        orden.cambiarEstado(siguiente, tecnico, solicitanteId);
+
+        orden.cambiarEstado(
+                siguiente,
+                tecnico,
+                solicitanteId);
+
         return repositorio.save(orden);
     }
 
