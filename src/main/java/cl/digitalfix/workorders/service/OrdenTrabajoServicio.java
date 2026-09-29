@@ -7,14 +7,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import cl.digitalfix.workorders.dto.CrearOrdenSolicitud;
+import cl.digitalfix.workorders.client.CatalogCliente;
 import cl.digitalfix.workorders.dto.ActualizarOrdenSolicitud;
 import cl.digitalfix.workorders.dto.CambiarEstadoSolicitud;
+import cl.digitalfix.workorders.dto.CrearOrdenSolicitud;
 import cl.digitalfix.workorders.entity.EstadoOrden;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
-import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
 import cl.digitalfix.workorders.entity.RepuestoOrden;
-import cl.digitalfix.workorders.client.CatalogCliente;
+import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
 
 @Service
 @Transactional(readOnly = true)
@@ -34,10 +34,10 @@ public class OrdenTrabajoServicio {
     @Transactional
     public OrdenTrabajo crearOrden(CrearOrdenSolicitud solicitud) {
         var orden = new OrdenTrabajo(
-            solicitud.servicioId(),
-            solicitud.descripcion().trim(),
-            solicitud.direccion().trim(),
-            solicitud.solicitanteId().trim()
+                solicitud.servicioId(),
+                solicitud.descripcion().trim(),
+                solicitud.direccion().trim(),
+                solicitud.solicitanteId().trim()
         );
 
         return repositorio.save(orden);
@@ -45,26 +45,44 @@ public class OrdenTrabajoServicio {
 
     public OrdenTrabajo consultarOrden(Long id) {
         return repositorio.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND, "No existe una orden con id " + id
-            ));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "No existe una orden con id " + id
+                ));
     }
 
     public List<OrdenTrabajo> listarOrdenes() {
         return repositorio.findAll();
     }
 
-    public List<OrdenTrabajo> listarOrdenesDelSolicitante(String solicitanteId) {
+    public List<OrdenTrabajo> listarOrdenesDelSolicitante(
+            String solicitanteId) {
+
         return repositorio.findBySolicitanteId(solicitanteId);
     }
 
     @Transactional
-    public OrdenTrabajo actualizarOrden(Long id, ActualizarOrdenSolicitud datos, String solicitanteId) {
-        var orden = ordenPropiaParaModificar(id, solicitanteId);
+    public OrdenTrabajo actualizarOrden(
+            Long id,
+            ActualizarOrdenSolicitud datos,
+            String solicitanteId) {
+
+        var orden = ordenPropiaParaModificar(
+                id,
+                solicitanteId);
+
         if (!"CREADA".equals(orden.getEstado())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Solo se pueden editar órdenes creadas");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Solo se pueden editar órdenes creadas");
         }
-        orden.actualizar(datos.servicioId(), datos.descripcion().trim(), datos.direccion().trim(), solicitanteId);
+
+        orden.actualizar(
+                datos.servicioId(),
+                datos.descripcion().trim(),
+                datos.direccion().trim(),
+                solicitanteId);
+
         return repositorio.save(orden);
     }
 
@@ -72,10 +90,17 @@ public class OrdenTrabajoServicio {
     public OrdenTrabajo cambiarEstado(
             Long id,
             CambiarEstadoSolicitud datos,
-            String solicitanteId) {
+            String actorId,
+            boolean puedeGestionarOrdenes) {
 
-        var orden = ordenPropiaParaModificar(id, solicitanteId);
-        var actual = EstadoOrden.valueOf(orden.getEstado());
+        var orden = ordenParaGestionar(
+                id,
+                actorId,
+                puedeGestionarOrdenes);
+
+        var actual = EstadoOrden.valueOf(
+                orden.getEstado());
+
         var siguiente = datos.status();
 
         if (!actual.permite(siguiente)) {
@@ -84,7 +109,7 @@ public class OrdenTrabajoServicio {
                     "Transición de estado no permitida");
         }
 
-        // Un reintento del mismo estado no debe volver a modificar repuestos
+        // Un reintento del mismo estado no debe modificar repuestos
         // ni volver a descontar stock.
         if (actual == siguiente) {
             return orden;
@@ -104,12 +129,12 @@ public class OrdenTrabajoServicio {
                         "Debes asignar un técnico");
             }
 
-            var repuestosSolicitud = datos.repuestos() == null
-                    ? List.<cl.digitalfix.workorders.dto.RepuestoOrdenSolicitud>of()
-                    : datos.repuestos();
+            var repuestosSolicitud =
+                    datos.repuestos() == null
+                            ? List.<cl.digitalfix.workorders.dto.RepuestoOrdenSolicitud>of()
+                            : datos.repuestos();
 
-            // Si la orden no utiliza repuestos, no se llama a Catalog porque
-            // su endpoint de descuento requiere al menos uno.
+            // Si la orden no utiliza repuestos no se llama a Catalog.
             if (!repuestosSolicitud.isEmpty()) {
                 catalogCliente.descontarStock(
                         orden.getId(),
@@ -117,19 +142,21 @@ public class OrdenTrabajoServicio {
             }
 
             var repuestos = repuestosSolicitud.stream()
-                    .map(r -> new RepuestoOrden(
-                            r.repuestoId(),
-                            r.cantidad()))
+                    .map(repuesto -> new RepuestoOrden(
+                            repuesto.repuestoId(),
+                            repuesto.cantidad()))
                     .toList();
 
             orden.actualizarRepuestos(
                     repuestos,
-                    solicitanteId);
+                    actorId);
 
         } else {
 
             if (datos.tecnicoId() != null
-                    && !datos.tecnicoId().trim().equals(tecnico)) {
+                    && !datos.tecnicoId()
+                            .trim()
+                            .equals(tecnico)) {
 
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
@@ -149,27 +176,72 @@ public class OrdenTrabajoServicio {
         orden.cambiarEstado(
                 siguiente,
                 tecnico,
-                solicitanteId);
+                actorId);
 
         return repositorio.save(orden);
     }
 
     @Transactional
-    public void eliminarOrden(Long id, String solicitanteId) {
-        var orden = ordenPropiaParaModificar(id, solicitanteId);
-        if (!"CREADA".equals(orden.getEstado()) && !"CANCELADA".equals(orden.getEstado())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Solo se pueden eliminar órdenes creadas o canceladas");
+    public void eliminarOrden(
+            Long id,
+            String solicitanteId) {
+
+        var orden = ordenPropiaParaModificar(
+                id,
+                solicitanteId);
+
+        if (!"CREADA".equals(orden.getEstado())
+                && !"CANCELADA".equals(orden.getEstado())) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Solo se pueden eliminar órdenes creadas o canceladas");
         }
+
         repositorio.delete(orden);
     }
 
-    private OrdenTrabajo ordenPropiaParaModificar(Long id, String solicitanteId) {
-        // Bloqueo hasta commit: evita editar/eliminar durante un cambio de estado concurrente.
+    private OrdenTrabajo ordenPropiaParaModificar(
+            Long id,
+            String solicitanteId) {
+
         var orden = repositorio.findByIdParaModificar(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden no encontrada"));
-        if (solicitanteId == null || !solicitanteId.equals(orden.getSolicitanteId())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden no encontrada");
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Orden no encontrada"));
+
+        if (solicitanteId == null
+                || !solicitanteId.equals(
+                        orden.getSolicitanteId())) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Orden no encontrada");
         }
+
+        return orden;
+    }
+
+    private OrdenTrabajo ordenParaGestionar(
+            Long id,
+            String actorId,
+            boolean puedeGestionarOrdenes) {
+
+        var orden = repositorio.findByIdParaModificar(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Orden no encontrada"));
+
+        if (!puedeGestionarOrdenes
+                && (actorId == null
+                    || !actorId.equals(
+                            orden.getSolicitanteId()))) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Orden no encontrada");
+        }
+
         return orden;
     }
 }
