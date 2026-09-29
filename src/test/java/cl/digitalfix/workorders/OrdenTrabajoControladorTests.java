@@ -18,6 +18,7 @@ import cl.digitalfix.workorders.controller.OrdenTrabajoControlador;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
 import cl.digitalfix.workorders.service.OrdenTrabajoServicio;
+import cl.digitalfix.workorders.client.CatalogCliente;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -36,6 +37,9 @@ class OrdenTrabajoControladorTests {
     // Solo simulamos la persistencia; el controlador y servicio son reales.
     @MockitoBean
     private OrdenTrabajoRepositorio repositorio;
+
+    @MockitoBean
+    private CatalogCliente catalogCliente;
 
     @Test
     void filtraOrdenesPorSolicitanteEnRepositorio() throws Exception {
