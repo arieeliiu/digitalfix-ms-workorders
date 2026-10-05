@@ -1,4 +1,4 @@
-package cl.digitalfix.workorders.dto;
+package cl.digitalfix.workorders.dto.request;
 
 import java.util.List;
 

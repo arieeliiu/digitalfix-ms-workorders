@@ -8,10 +8,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import cl.digitalfix.workorders.client.CatalogCliente;
-import cl.digitalfix.workorders.dto.ActualizarOrdenSolicitud;
-import cl.digitalfix.workorders.dto.CambiarEstadoSolicitud;
-import cl.digitalfix.workorders.dto.CrearOrdenSolicitud;
+import cl.digitalfix.workorders.dto.request.ActualizarOrdenSolicitud;
+import cl.digitalfix.workorders.dto.request.CambiarEstadoSolicitud;
+import cl.digitalfix.workorders.dto.request.CrearOrdenSolicitud;
 import cl.digitalfix.workorders.entity.EstadoOrden;
+import cl.digitalfix.workorders.dto.response.OrdenTrabajoResponse;
+import cl.digitalfix.workorders.mapper.OrdenTrabajoMapper;
+import static cl.digitalfix.workorders.mapper.OrdenTrabajoMapper.respuesta;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.entity.RepuestoOrden;
 import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
@@ -32,7 +35,7 @@ public class OrdenTrabajoServicio {
     }
 
     @Transactional
-    public OrdenTrabajo crearOrden(CrearOrdenSolicitud solicitud) {
+    public OrdenTrabajoResponse crearOrden(CrearOrdenSolicitud solicitud) {
         var orden = new OrdenTrabajo(
                 solicitud.servicioId(),
                 solicitud.descripcion().trim(),
@@ -40,29 +43,33 @@ public class OrdenTrabajoServicio {
                 solicitud.solicitanteId().trim()
         );
 
-        return repositorio.save(orden);
+        return respuesta(repositorio.save(orden));
     }
 
-    public OrdenTrabajo consultarOrden(Long id) {
-        return repositorio.findById(id)
+    public OrdenTrabajoResponse consultarOrden(Long id) {
+        return respuesta(repositorio.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "No existe una orden con id " + id
-                ));
+                )));
     }
 
-    public List<OrdenTrabajo> listarOrdenes() {
-        return repositorio.findAll();
+    public List<OrdenTrabajoResponse> listarOrdenes() {
+        return repositorio.findAll().stream()
+                .map(OrdenTrabajoMapper::respuesta)
+                .toList();
     }
 
-    public List<OrdenTrabajo> listarOrdenesDelSolicitante(
+    public List<OrdenTrabajoResponse> listarOrdenesDelSolicitante(
             String solicitanteId) {
 
-        return repositorio.findBySolicitanteId(solicitanteId);
+        return repositorio.findBySolicitanteId(solicitanteId).stream()
+                .map(OrdenTrabajoMapper::respuesta)
+                .toList();
     }
 
     @Transactional
-    public OrdenTrabajo actualizarOrden(
+    public OrdenTrabajoResponse actualizarOrden(
             Long id,
             ActualizarOrdenSolicitud datos,
             String solicitanteId) {
@@ -83,11 +90,11 @@ public class OrdenTrabajoServicio {
                 datos.direccion().trim(),
                 solicitanteId);
 
-        return repositorio.save(orden);
+        return respuesta(repositorio.save(orden));
     }
 
     @Transactional
-    public OrdenTrabajo cambiarEstado(
+    public OrdenTrabajoResponse cambiarEstado(
             Long id,
             CambiarEstadoSolicitud datos,
             String actorId,
@@ -112,7 +119,7 @@ public class OrdenTrabajoServicio {
         // Un reintento del mismo estado no debe modificar repuestos
         // ni volver a descontar stock.
         if (actual == siguiente) {
-            return orden;
+            return respuesta(orden);
         }
 
         String tecnico = orden.getTecnicoId();
@@ -131,7 +138,7 @@ public class OrdenTrabajoServicio {
 
             var repuestosSolicitud =
                     datos.repuestos() == null
-                            ? List.<cl.digitalfix.workorders.dto.RepuestoOrdenSolicitud>of()
+                            ? List.<cl.digitalfix.workorders.dto.request.RepuestoOrdenSolicitud>of()
                             : datos.repuestos();
 
             // Si la orden no utiliza repuestos no se llama a Catalog.
@@ -178,7 +185,7 @@ public class OrdenTrabajoServicio {
                 tecnico,
                 actorId);
 
-        return repositorio.save(orden);
+        return respuesta(repositorio.save(orden));
     }
 
     @Transactional

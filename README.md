@@ -445,3 +445,15 @@ Actualmente se encuentra implementado:
 - manejo de errores provenientes de Catalog.
 
 La siguiente etapa corresponde a integrar este contrato con BFF, frontend e infraestructura para realizar el flujo completo.
+
+## Refactor por capas (5 de octubre de 2026)
+
+Los controllers utilizan DTOs independientes en `dto/request` y `dto/response`.
+La capa service coordina persistencia y mapeo mediante `mapper`, sin exponer
+entidades JPA en los contratos HTTP. Las validaciones, rutas, códigos, estados,
+reglas de dominio y configuración existentes se conservan.
+La configuración de RestClient se encuentra en `config/client`; la comunicación con Catalog sigue siendo síncrona.
+
+La revisión y las decisiones integradas se documentan en
+[REFACTOR.md del BFF](../digitalfix-ms-bff/REFACTOR.md), disponible en el workspace
+con los repositorios hermanos. No se incorpora RabbitMQ ni Kafka.

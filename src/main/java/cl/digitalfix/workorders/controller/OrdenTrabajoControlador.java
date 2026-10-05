@@ -15,10 +15,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import cl.digitalfix.workorders.dto.ActualizarOrdenSolicitud;
-import cl.digitalfix.workorders.dto.CambiarEstadoSolicitud;
-import cl.digitalfix.workorders.dto.CrearOrdenSolicitud;
-import cl.digitalfix.workorders.entity.OrdenTrabajo;
+import cl.digitalfix.workorders.dto.request.ActualizarOrdenSolicitud;
+import cl.digitalfix.workorders.dto.request.CambiarEstadoSolicitud;
+import cl.digitalfix.workorders.dto.request.CrearOrdenSolicitud;
+import cl.digitalfix.workorders.dto.response.OrdenTrabajoResponse;
 import cl.digitalfix.workorders.service.OrdenTrabajoServicio;
 import jakarta.validation.Valid;
 
@@ -34,21 +34,21 @@ public class OrdenTrabajoControlador {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrdenTrabajo crearOrden(
+    public OrdenTrabajoResponse crearOrden(
             @Valid @RequestBody CrearOrdenSolicitud solicitud) {
 
         return servicio.crearOrden(solicitud);
     }
 
     @GetMapping("/{id}")
-    public OrdenTrabajo consultarOrden(
+    public OrdenTrabajoResponse consultarOrden(
             @PathVariable Long id) {
 
         return servicio.consultarOrden(id);
     }
 
     @GetMapping
-    public List<OrdenTrabajo> listarOrdenes(
+    public List<OrdenTrabajoResponse> listarOrdenes(
             @RequestParam(required = false) String solicitanteId) {
 
         // Parámetro interno: el BFF lo deriva del JWT.
@@ -58,7 +58,7 @@ public class OrdenTrabajoControlador {
     }
 
     @PutMapping("/{id}")
-    public OrdenTrabajo actualizarOrden(
+    public OrdenTrabajoResponse actualizarOrden(
             @PathVariable Long id,
             @Valid @RequestBody ActualizarOrdenSolicitud solicitud,
             @RequestParam String solicitanteId) {
@@ -70,7 +70,7 @@ public class OrdenTrabajoControlador {
     }
 
     @PutMapping("/{id}/status")
-    public OrdenTrabajo cambiarEstado(
+    public OrdenTrabajoResponse cambiarEstado(
             @PathVariable Long id,
             @Valid @RequestBody CambiarEstadoSolicitud solicitud,
             @RequestParam String solicitanteId,

@@ -1,8 +1,8 @@
-package cl.digitalfix.workorders.client;
+package cl.digitalfix.workorders.dto.request;
 
 import java.util.List;
 
-import cl.digitalfix.workorders.dto.RepuestoOrdenSolicitud;
+import cl.digitalfix.workorders.dto.request.RepuestoOrdenSolicitud;
 
 public record DescontarStockCatalogSolicitud(
         Long ordenId,
