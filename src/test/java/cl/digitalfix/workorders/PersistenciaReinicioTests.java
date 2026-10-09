@@ -6,8 +6,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
-import cl.digitalfix.workorders.dto.CrearOrdenSolicitud;
-import cl.digitalfix.workorders.service.OrdenTrabajoServicio;
+import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
+import cl.digitalfix.workorders.service.OrdenService;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PersistenciaReinicioTests {
@@ -17,18 +17,18 @@ class PersistenciaReinicioTests {
     void ordenPersisteTrasCerrarYReabrirAplicacion() {
         Long id;
         try (var contexto = iniciar()) {
-            var orden = contexto.getBean(OrdenTrabajoServicio.class).crearOrden(
-                new CrearOrdenSolicitud(1L, "Revisión", "Calle 123", "oid-prueba"));
-            id = orden.getId();
+            var orden = contexto.getBean(OrdenService.class).crearOrden(
+                new NuevaOrdenRequest(1L, "Revisión", "Calle 123", "oid-prueba"));
+            id = orden.id();
             assertNotNull(id);
-            assertEquals("CREADA", orden.getEstado());
-            assertNotNull(orden.getFechaCreacion());
+            assertEquals("CREADA", orden.estado());
+            assertNotNull(orden.fechaCreacion());
         }
         try (var contexto = iniciar()) {
-            var servicio = contexto.getBean(OrdenTrabajoServicio.class);
+            var servicio = contexto.getBean(OrdenService.class);
             var orden = servicio.consultarOrden(id);
-            assertEquals("oid-prueba", orden.getSolicitanteId());
-            assertEquals("Revisión", orden.getDescripcion());
+            assertEquals("oid-prueba", orden.solicitanteId());
+            assertEquals("Revisión", orden.descripcion());
             assertEquals(1, servicio.listarOrdenesDelSolicitante("oid-prueba").size());
             assertTrue(servicio.listarOrdenesDelSolicitante("otro-oid").isEmpty());
         }

@@ -1,23 +1,28 @@
 package cl.digitalfix.workorders.entity;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.JoinColumn;
 
-import java.util.ArrayList;
-import java.util.List;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "ordenes_trabajo")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrdenTrabajo {
 
     @Id
@@ -58,10 +63,6 @@ public class OrdenTrabajo {
 
     @Column(name = "fecha_actualizacion")
     private Instant fechaActualizacion;
-
-    protected OrdenTrabajo() {
-        // Constructor requerido por JPA.
-    }
 
     public OrdenTrabajo(Long servicioId, String descripcion,
             String direccion, String solicitanteId) {
@@ -105,41 +106,5 @@ public class OrdenTrabajo {
     private void registrarCambio(String actor) {
         actualizadoPor = actor;
         fechaActualizacion = Instant.now();
-    }
-
-    public String getTecnicoId() { return tecnicoId; }
-    public String getActualizadoPor() { return actualizadoPor; }
-    public Instant getFechaActualizacion() { return fechaActualizacion; }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getServicioId() {
-        return servicioId;
-    }
-
-    public String getDescripcion() {
-        return descripcion;
-    }
-
-    public String getDireccion() {
-        return direccion;
-    }
-
-    public String getSolicitanteId() {
-        return solicitanteId;
-    }
-
-    public Instant getFechaCreacion() {
-        return fechaCreacion;
-    }
-
-    public String getEstado() {
-        return estado;
-    }
-
-    public List<RepuestoOrden> getRepuestos() {
-        return repuestos;
     }
 }
