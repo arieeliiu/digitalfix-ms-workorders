@@ -3,30 +3,30 @@ package cl.digitalfix.workorders.client;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
-import cl.digitalfix.workorders.dto.request.DescontarStockCatalogSolicitud;
-import cl.digitalfix.workorders.dto.request.RepuestoOrdenSolicitud;
+import cl.digitalfix.workorders.dto.request.DescontarStockCatalogoRequest;
+import cl.digitalfix.workorders.dto.request.RepuestoRequest;
 
 @Component
-public class CatalogCliente {
+public class CatalogoClient {
 
     private final RestClient restClient;
 
-    public CatalogCliente(@Qualifier("catalogRestClient") RestClient restClient) {
+    public CatalogoClient(@Qualifier("catalogRestClient") RestClient restClient) {
         this.restClient = restClient;
     }
 
     public void descontarStock(
             Long ordenId,
-            List<RepuestoOrdenSolicitud> repuestos) {
+            List<RepuestoRequest> repuestos) {
 
-        var solicitud = new DescontarStockCatalogSolicitud(
+        var solicitud = new DescontarStockCatalogoRequest(
                 ordenId,
                 repuestos);
 

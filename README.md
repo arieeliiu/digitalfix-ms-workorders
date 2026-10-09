@@ -457,3 +457,15 @@ La configuración de RestClient se encuentra en `config/client`; la comunicació
 La revisión y las decisiones integradas se documentan en
 [REFACTOR.md del BFF](../digitalfix-ms-bff/REFACTOR.md), disponible en el workspace
 con los repositorios hermanos. No se incorpora RabbitMQ ni Kafka.
+
+
+## Convención técnica y Lombok (9 de octubre de 2026)
+
+Se aplica dominio en español + sufijo técnico en inglés: Controller, Service,
+Repository, Client, Request, Response, Config, Mapper y Exception. Los DTOs record
+se conservan; Lombok reemplaza únicamente código repetitivo de clases mutables
+y constructores simples. Los contratos y la configuración existentes se preservan.
+
+[REFACTOR_LOMBOK.md](REFACTOR_LOMBOK.md) contiene el inventario de renombrados,
+las decisiones de compatibilidad, resultados de Maven con Java 21 y deuda técnica.
+Los nombres que aparecen en secciones anteriores corresponden a etapas previas.

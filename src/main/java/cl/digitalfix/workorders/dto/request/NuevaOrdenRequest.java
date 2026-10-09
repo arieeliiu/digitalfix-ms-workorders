@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 // El cliente no decide el identificador, la fecha ni el estado de la orden.
-public record CrearOrdenSolicitud(
+public record NuevaOrdenRequest(
     @NotNull(message = "El servicio es obligatorio")
     @Positive(message = "El identificador del servicio debe ser positivo")
     Long servicioId,

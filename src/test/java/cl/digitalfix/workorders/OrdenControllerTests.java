@@ -14,11 +14,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import cl.digitalfix.workorders.controller.OrdenTrabajoControlador;
+import cl.digitalfix.workorders.controller.OrdenController;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
-import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
-import cl.digitalfix.workorders.service.OrdenTrabajoServicio;
-import cl.digitalfix.workorders.client.CatalogCliente;
+import cl.digitalfix.workorders.repository.OrdenRepository;
+import cl.digitalfix.workorders.service.OrdenService;
+import cl.digitalfix.workorders.client.CatalogoClient;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -27,19 +27,19 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(OrdenTrabajoControlador.class)
-@Import(OrdenTrabajoServicio.class)
-class OrdenTrabajoControladorTests {
+@WebMvcTest(OrdenController.class)
+@Import(OrdenService.class)
+class OrdenControllerTests {
 
     @Autowired
     private MockMvc cliente;
 
     // Solo simulamos la persistencia; el controlador y servicio son reales.
     @MockitoBean
-    private OrdenTrabajoRepositorio repositorio;
+    private OrdenRepository repositorio;
 
     @MockitoBean
-    private CatalogCliente catalogCliente;
+    private CatalogoClient catalogCliente;
 
     @Test
     void filtraOrdenesPorSolicitanteEnRepositorio() throws Exception {

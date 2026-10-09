@@ -3,7 +3,7 @@ package cl.digitalfix.workorders.dto.response;
 import java.time.Instant;
 import java.util.List;
 
-public record OrdenTrabajoResponse(
+public record OrdenResponse(
         Long id,
         Long servicioId,
         String descripcion,

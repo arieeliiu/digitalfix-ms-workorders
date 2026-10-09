@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
-public record ActualizarOrdenSolicitud(
+public record ActualizarOrdenRequest(
     @NotNull @Positive Long servicioId,
     @NotBlank @Size(max = 1000) String descripcion,
     @NotBlank @Size(max = 300) String direccion

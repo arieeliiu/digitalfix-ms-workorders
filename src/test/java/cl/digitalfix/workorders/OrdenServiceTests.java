@@ -6,23 +6,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.server.ResponseStatusException;
-import cl.digitalfix.workorders.client.CatalogCliente;
+import cl.digitalfix.workorders.client.CatalogoClient;
 import cl.digitalfix.workorders.dto.request.*;
 import cl.digitalfix.workorders.entity.EstadoOrden;
-import cl.digitalfix.workorders.service.OrdenTrabajoServicio;
+import cl.digitalfix.workorders.service.OrdenService;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-class OrdenTrabajoServicioTests {
-    @Autowired OrdenTrabajoServicio servicio;
-    @MockitoBean CatalogCliente catalog;
+class OrdenServiceTests {
+    @Autowired OrdenService servicio;
+    @MockitoBean CatalogoClient catalog;
 
     @Test
     void asignacionReintentoYLecturaDeRepuestosMantienenContrato() {
-        var orden = servicio.crearOrden(new CrearOrdenSolicitud(1L, "Revisión", "Calle", "cliente"));
-        var repuestos = List.of(new RepuestoOrdenSolicitud(4L, 2));
-        var solicitud = new CambiarEstadoSolicitud(EstadoOrden.ASIGNADA, " tecnico-1 ", repuestos);
+        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente"));
+        var repuestos = List.of(new RepuestoRequest(4L, 2));
+        var solicitud = new CambioEstadoRequest(EstadoOrden.ASIGNADA, " tecnico-1 ", repuestos);
         var asignada = servicio.cambiarEstado(orden.id(), solicitud, "operador", true);
         assertEquals("ASIGNADA", asignada.estado());
         assertEquals("tecnico-1", asignada.tecnicoId());
@@ -42,9 +42,9 @@ class OrdenTrabajoServicioTests {
 
     @Test
     void transicionInvalidaYOrdenAjenaMantienenCodigos() {
-        var orden = servicio.crearOrden(new CrearOrdenSolicitud(1L, "Revisión", "Calle", "cliente"));
+        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente"));
         var error = assertThrows(ResponseStatusException.class, () -> servicio.cambiarEstado(
-                orden.id(), new CambiarEstadoSolicitud(EstadoOrden.EN_EJECUCION, "tecnico", null), "operador", true));
+                orden.id(), new CambioEstadoRequest(EstadoOrden.EN_EJECUCION, "tecnico", null), "operador", true));
         assertEquals(409, error.getStatusCode().value());
         var ajena = assertThrows(ResponseStatusException.class, () -> servicio.eliminarOrden(orden.id(), "otro"));
         assertEquals(404, ajena.getStatusCode().value());
@@ -53,9 +53,9 @@ class OrdenTrabajoServicioTests {
 
     @Test
     void cancelarYEliminarConservanSemanticaActual() {
-        var orden = servicio.crearOrden(new CrearOrdenSolicitud(1L, "Revisión", "Calle", "cliente"));
+        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente"));
         var cancelada = servicio.cambiarEstado(orden.id(),
-                new CambiarEstadoSolicitud(EstadoOrden.CANCELADA, null, null), "cliente", false);
+                new CambioEstadoRequest(EstadoOrden.CANCELADA, null, null), "cliente", false);
         assertEquals("CANCELADA", cancelada.estado());
         servicio.eliminarOrden(orden.id(), "cliente");
         var error = assertThrows(ResponseStatusException.class, () -> servicio.consultarOrden(orden.id()));

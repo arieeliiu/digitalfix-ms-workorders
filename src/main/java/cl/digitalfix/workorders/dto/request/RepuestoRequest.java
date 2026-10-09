@@ -3,7 +3,7 @@ package cl.digitalfix.workorders.dto.request;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
-public record RepuestoOrdenSolicitud(
+public record RepuestoRequest(
 
     @NotNull(message = "El repuesto es obligatorio")
     @Positive(message = "El identificador del repuesto debe ser positivo")

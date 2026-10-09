@@ -2,6 +2,8 @@ package cl.digitalfix.workorders.controller;
 
 import java.util.List;
 
+import jakarta.validation.Valid;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,40 +17,38 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import cl.digitalfix.workorders.dto.request.ActualizarOrdenSolicitud;
-import cl.digitalfix.workorders.dto.request.CambiarEstadoSolicitud;
-import cl.digitalfix.workorders.dto.request.CrearOrdenSolicitud;
-import cl.digitalfix.workorders.dto.response.OrdenTrabajoResponse;
-import cl.digitalfix.workorders.service.OrdenTrabajoServicio;
-import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+
+import cl.digitalfix.workorders.dto.request.ActualizarOrdenRequest;
+import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
+import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
+import cl.digitalfix.workorders.dto.response.OrdenResponse;
+import cl.digitalfix.workorders.service.OrdenService;
 
 @RestController
 @RequestMapping("/api/workorders")
-public class OrdenTrabajoControlador {
+@RequiredArgsConstructor
+public class OrdenController {
 
-    private final OrdenTrabajoServicio servicio;
-
-    public OrdenTrabajoControlador(OrdenTrabajoServicio servicio) {
-        this.servicio = servicio;
-    }
+    private final OrdenService servicio;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrdenTrabajoResponse crearOrden(
-            @Valid @RequestBody CrearOrdenSolicitud solicitud) {
+    public OrdenResponse crearOrden(
+            @Valid @RequestBody NuevaOrdenRequest solicitud) {
 
         return servicio.crearOrden(solicitud);
     }
 
     @GetMapping("/{id}")
-    public OrdenTrabajoResponse consultarOrden(
+    public OrdenResponse consultarOrden(
             @PathVariable Long id) {
 
         return servicio.consultarOrden(id);
     }
 
     @GetMapping
-    public List<OrdenTrabajoResponse> listarOrdenes(
+    public List<OrdenResponse> listarOrdenes(
             @RequestParam(required = false) String solicitanteId) {
 
         // Parámetro interno: el BFF lo deriva del JWT.
@@ -58,9 +58,9 @@ public class OrdenTrabajoControlador {
     }
 
     @PutMapping("/{id}")
-    public OrdenTrabajoResponse actualizarOrden(
+    public OrdenResponse actualizarOrden(
             @PathVariable Long id,
-            @Valid @RequestBody ActualizarOrdenSolicitud solicitud,
+            @Valid @RequestBody ActualizarOrdenRequest solicitud,
             @RequestParam String solicitanteId) {
 
         return servicio.actualizarOrden(
@@ -70,9 +70,9 @@ public class OrdenTrabajoControlador {
     }
 
     @PutMapping("/{id}/status")
-    public OrdenTrabajoResponse cambiarEstado(
+    public OrdenResponse cambiarEstado(
             @PathVariable Long id,
-            @Valid @RequestBody CambiarEstadoSolicitud solicitud,
+            @Valid @RequestBody CambioEstadoRequest solicitud,
             @RequestParam String solicitanteId,
             JwtAuthenticationToken autenticacion) {
 

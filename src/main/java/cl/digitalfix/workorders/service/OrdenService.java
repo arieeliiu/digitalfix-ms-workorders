@@ -7,35 +7,31 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import cl.digitalfix.workorders.client.CatalogCliente;
-import cl.digitalfix.workorders.dto.request.ActualizarOrdenSolicitud;
-import cl.digitalfix.workorders.dto.request.CambiarEstadoSolicitud;
-import cl.digitalfix.workorders.dto.request.CrearOrdenSolicitud;
+import lombok.RequiredArgsConstructor;
+
+import cl.digitalfix.workorders.client.CatalogoClient;
+import cl.digitalfix.workorders.dto.request.ActualizarOrdenRequest;
+import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
+import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
+import cl.digitalfix.workorders.dto.response.OrdenResponse;
 import cl.digitalfix.workorders.entity.EstadoOrden;
-import cl.digitalfix.workorders.dto.response.OrdenTrabajoResponse;
-import cl.digitalfix.workorders.mapper.OrdenTrabajoMapper;
-import static cl.digitalfix.workorders.mapper.OrdenTrabajoMapper.respuesta;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.entity.RepuestoOrden;
-import cl.digitalfix.workorders.repository.OrdenTrabajoRepositorio;
+import cl.digitalfix.workorders.mapper.OrdenMapper;
+import cl.digitalfix.workorders.repository.OrdenRepository;
+
+import static cl.digitalfix.workorders.mapper.OrdenMapper.respuesta;
 
 @Service
 @Transactional(readOnly = true)
-public class OrdenTrabajoServicio {
+@RequiredArgsConstructor
+public class OrdenService {
 
-    private final OrdenTrabajoRepositorio repositorio;
-    private final CatalogCliente catalogCliente;
-
-    public OrdenTrabajoServicio(
-            OrdenTrabajoRepositorio repositorio,
-            CatalogCliente catalogCliente) {
-
-        this.repositorio = repositorio;
-        this.catalogCliente = catalogCliente;
-    }
+    private final OrdenRepository repositorio;
+    private final CatalogoClient catalogCliente;
 
     @Transactional
-    public OrdenTrabajoResponse crearOrden(CrearOrdenSolicitud solicitud) {
+    public OrdenResponse crearOrden(NuevaOrdenRequest solicitud) {
         var orden = new OrdenTrabajo(
                 solicitud.servicioId(),
                 solicitud.descripcion().trim(),
@@ -46,7 +42,7 @@ public class OrdenTrabajoServicio {
         return respuesta(repositorio.save(orden));
     }
 
-    public OrdenTrabajoResponse consultarOrden(Long id) {
+    public OrdenResponse consultarOrden(Long id) {
         return respuesta(repositorio.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -54,24 +50,24 @@ public class OrdenTrabajoServicio {
                 )));
     }
 
-    public List<OrdenTrabajoResponse> listarOrdenes() {
+    public List<OrdenResponse> listarOrdenes() {
         return repositorio.findAll().stream()
-                .map(OrdenTrabajoMapper::respuesta)
+                .map(OrdenMapper::respuesta)
                 .toList();
     }
 
-    public List<OrdenTrabajoResponse> listarOrdenesDelSolicitante(
+    public List<OrdenResponse> listarOrdenesDelSolicitante(
             String solicitanteId) {
 
         return repositorio.findBySolicitanteId(solicitanteId).stream()
-                .map(OrdenTrabajoMapper::respuesta)
+                .map(OrdenMapper::respuesta)
                 .toList();
     }
 
     @Transactional
-    public OrdenTrabajoResponse actualizarOrden(
+    public OrdenResponse actualizarOrden(
             Long id,
-            ActualizarOrdenSolicitud datos,
+            ActualizarOrdenRequest datos,
             String solicitanteId) {
 
         var orden = ordenPropiaParaModificar(
@@ -94,9 +90,9 @@ public class OrdenTrabajoServicio {
     }
 
     @Transactional
-    public OrdenTrabajoResponse cambiarEstado(
+    public OrdenResponse cambiarEstado(
             Long id,
-            CambiarEstadoSolicitud datos,
+            CambioEstadoRequest datos,
             String actorId,
             boolean puedeGestionarOrdenes) {
 
@@ -138,7 +134,7 @@ public class OrdenTrabajoServicio {
 
             var repuestosSolicitud =
                     datos.repuestos() == null
-                            ? List.<cl.digitalfix.workorders.dto.request.RepuestoOrdenSolicitud>of()
+                            ? List.<cl.digitalfix.workorders.dto.request.RepuestoRequest>of()
                             : datos.repuestos();
 
             // Si la orden no utiliza repuestos no se llama a Catalog.

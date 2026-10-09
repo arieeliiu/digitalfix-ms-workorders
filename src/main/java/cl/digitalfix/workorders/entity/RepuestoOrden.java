@@ -3,7 +3,15 @@ package cl.digitalfix.workorders.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 @Embeddable
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
 public class RepuestoOrden {
 
     @Column(name = "repuesto_id", nullable = false)
@@ -11,21 +19,4 @@ public class RepuestoOrden {
 
     @Column(nullable = false)
     private Integer cantidad;
-
-    protected RepuestoOrden() {
-        // Constructor requerido por JPA.
-    }
-
-    public RepuestoOrden(Long repuestoId, Integer cantidad) {
-        this.repuestoId = repuestoId;
-        this.cantidad = cantidad;
-    }
-
-    public Long getRepuestoId() {
-        return repuestoId;
-    }
-
-    public Integer getCantidad() {
-        return cantidad;
-    }
 }
