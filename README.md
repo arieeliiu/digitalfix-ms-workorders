@@ -56,21 +56,21 @@ La comunicación con Catalog se configura mediante:
 CATALOG_URL
 ```
 
-Si la variable no está definida, durante el desarrollo local se utiliza:
+Si la variable no está definida, se utiliza el nombre DNS de Docker:
 
 ```text
-http://localhost:8081
+http://catalog:8081
 ```
 
 La propiedad utilizada es:
 
 ```properties
-catalog.url=${CATALOG_URL:http://localhost:8081}
+catalog.url=${CATALOG_URL:http://catalog:8081}
 ```
 
 La conexión a Oracle se configura mediante las propiedades de datasource de Spring.
 
-Las credenciales de base de datos no deben mantenerse permanentemente dentro del repositorio y deben migrarse a variables de entorno antes del despliegue final.
+Se requieren `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`. El Compose central en `../digitalfix-infra/docker-compose.yml` las entrega desde `digitalfix-infra/apps/.env` y establece `CATALOG_URL=http://catalog:8081`. Para ejecutar fuera de Docker, exporta `CATALOG_URL=http://localhost:8081` en tu shell. El Dockerfile compila con Java 21 desde un clon limpio.
 
 Durante el desarrollo, Hibernate actualiza el esquema mediante:
 
