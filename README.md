@@ -1,6 +1,6 @@
 # DigitalFix — Workorders
 
-Microservicio encargado de administrar las órdenes de trabajo de DigitalFix, controlar su ciclo de estados y coordinar el descuento de repuestos con Catalog al momento de asignar una orden.
+Microservicio encargado de administrar las órdenes de trabajo de DigitalFix, controlar su ciclo de estados y coordinar el descuento de repuestos con Catalog durante la asignación de una orden.
 
 ## Integrantes
 
@@ -15,97 +15,75 @@ Microservicio encargado de administrar las órdenes de trabajo de DigitalFix, co
 - Spring Data JPA
 - Spring Web MVC
 - Spring Security OAuth2 Resource Server
+- RestClient
 - Oracle Database en Amazon RDS
 - H2 para pruebas
+- Docker
 
-## Integración con BFF
+## Arquitectura
 
-Workorders funciona como un microservicio interno.
+Workorders funciona como microservicio interno.
 
-El BFF realiza las llamadas hacia Workorders después de recibir las solicitudes provenientes del frontend.
-
-El endpoint:
-
-```http
-GET /api/workorders
-```
-
-acepta el parámetro interno:
+El flujo actual es:
 
 ```text
-solicitanteId
+Angular
+   ↓
+AWS API Gateway
+   ↓
+BFF
+   ↓
+Workorders
+   ├──→ Catalog
+   │       ↓
+   │    Oracle RDS
+   │
+   ↓
+Oracle RDS
 ```
 
-para filtrar las órdenes correspondientes a un usuario.
+El frontend no se comunica directamente con Workorders.
 
-El BFF obtiene este identificador desde el JWT validado y lo utiliza también al crear o modificar órdenes.
+Las solicitudes llegan desde el BFF utilizando el JWT del usuario autenticado.
 
-Workorders no debe exponerse directamente a Internet.
+## Responsabilidades
 
-## Configuración
+Workorders se encarga de:
 
-El servicio utiliza por defecto el puerto:
+- crear órdenes de trabajo;
+- consultar órdenes;
+- listar órdenes;
+- filtrar órdenes por solicitante;
+- actualizar órdenes;
+- controlar el ciclo de estados;
+- asignar técnicos;
+- almacenar los repuestos asociados a una orden;
+- coordinar el descuento de stock con Catalog;
+- evitar transiciones de estado inválidas;
+- persistir las órdenes en Oracle RDS.
+
+## Puerto
+
+El servicio utiliza:
 
 ```text
 8082
 ```
 
-La comunicación con Catalog se configura mediante:
-
-```text
-CATALOG_URL
-```
-
-Si la variable no está definida, se utiliza el nombre DNS de Docker:
-
-```text
-http://catalog:8081
-```
-
-La propiedad utilizada es:
-
-```properties
-catalog.url=${CATALOG_URL:http://catalog:8081}
-```
-
-La conexión a Oracle se configura mediante las propiedades de datasource de Spring.
-
-Se requieren `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`. El Compose central en `../digitalfix-infra/docker-compose.yml` las entrega desde `digitalfix-infra/apps/.env` y establece `CATALOG_URL=http://catalog:8081`. Para ejecutar fuera de Docker, exporta `CATALOG_URL=http://localhost:8081` en tu shell. El Dockerfile compila con Java 21 desde un clon limpio.
-
-Durante el desarrollo, Hibernate actualiza el esquema mediante:
-
-```text
-spring.jpa.hibernate.ddl-auto=update
-```
-
-## Ejecución local
-
-Ejecutar:
-
-```powershell
-.\mvnw.cmd spring-boot:run
-```
-
-El servicio queda disponible por defecto en:
-
-```text
-http://localhost:8082
-```
-
 ## Endpoints
 
-| Método | Ruta | Resultado |
+| Método | Ruta | Función |
 |---|---|---|
 | POST | `/api/workorders` | Crea una orden |
-| GET | `/api/workorders/{id}` | Consulta una orden |
 | GET | `/api/workorders` | Lista órdenes |
-| PUT | `/api/workorders/{id}` | Actualiza una orden creada |
-| PUT | `/api/workorders/{id}/status` | Cambia el estado de una orden |
-| DELETE | `/api/workorders/{id}` | Elimina una orden creada o cancelada |
+| GET | `/api/workorders/{id}` | Consulta una orden |
+| PUT | `/api/workorders/{id}` | Actualiza una orden |
+| PUT | `/api/workorders/{id}/status` | Cambia el estado |
+| DELETE | `/api/workorders/{id}` | Elimina una orden cuando corresponde |
 
-## Crear una orden
+## Creación de órdenes
 
-Ejemplo de solicitud interna proveniente del BFF:
+Workorders recibe desde el BFF una solicitud como:
 
 ```json
 {
@@ -116,21 +94,82 @@ Ejemplo de solicitud interna proveniente del BFF:
 }
 ```
 
-El servidor genera automáticamente:
+El `solicitanteId` es agregado por el BFF a partir del claim `oid` del JWT.
 
-- identificador de la orden;
+El usuario no debe ingresarlo manualmente desde el frontend.
+
+Al crear una orden, Workorders genera automáticamente:
+
+- identificador;
 - fecha de creación;
 - estado inicial `CREADA`.
 
-Los datos inválidos reciben:
+## Consulta por solicitante
 
-```text
-400 Bad Request
+El endpoint:
+
+```http
+GET /api/workorders
 ```
 
-## Estados de una orden
+puede recibir el parámetro interno:
 
-El flujo implementado es:
+```text
+solicitanteId
+```
+
+Ejemplo:
+
+```http
+GET /api/workorders?solicitanteId=usuario-prueba
+```
+
+Si no se envía el parámetro, se devuelve la lista general.
+
+Si se envía, se filtran las órdenes correspondientes al solicitante indicado.
+
+El BFF decide cuándo utilizar este parámetro según el rol del usuario.
+
+## Actualización de órdenes
+
+La actualización utiliza:
+
+```http
+PUT /api/workorders/{id}
+```
+
+y requiere internamente:
+
+```text
+solicitanteId
+```
+
+Workorders permite editar únicamente órdenes que todavía se encuentren en estado:
+
+```text
+CREADA
+```
+
+Si se intenta modificar una orden en otro estado, responde:
+
+```text
+409 Conflict
+```
+
+## Estados
+
+Los estados implementados son:
+
+```text
+CREADA
+ASIGNADA
+EN_DESPLAZAMIENTO
+EN_EJECUCION
+CERRADA
+CANCELADA
+```
+
+El flujo normal es:
 
 ```text
 CREADA
@@ -140,15 +179,39 @@ CREADA
 → CERRADA
 ```
 
-Una orden también puede pasar a:
+Una orden activa también puede pasar a:
 
 ```text
 CANCELADA
 ```
 
-No se permite avanzar hacia estados posteriores sin haber asignado previamente un técnico.
+Una orden `CERRADA` o `CANCELADA` no puede continuar hacia otro estado.
 
-Las transiciones no permitidas generan:
+## Reglas de transición
+
+Las principales transiciones permitidas son:
+
+```text
+CREADA
+→ ASIGNADA
+
+ASIGNADA
+→ EN_DESPLAZAMIENTO
+
+EN_DESPLAZAMIENTO
+→ EN_EJECUCION
+
+EN_EJECUCION
+→ CERRADA
+```
+
+Además, una orden que no esté cerrada ni cancelada puede pasar a:
+
+```text
+CANCELADA
+```
+
+Si la transición no es válida, Workorders responde:
 
 ```text
 409 Conflict
@@ -174,17 +237,19 @@ Ejemplo:
 }
 ```
 
-Si no se especifica un técnico válido, Workorders responde:
+Si no existe un técnico válido, Workorders responde:
 
 ```text
 400 Bad Request
 ```
 
+El técnico se define durante la asignación.
+
 ## Repuestos asociados a una orden
 
-Una orden puede utilizar cero o más repuestos.
+Durante la asignación se pueden utilizar cero o más repuestos.
 
-Cada repuesto se identifica mediante:
+Cada repuesto contiene:
 
 ```text
 repuestoId
@@ -201,47 +266,48 @@ Ejemplo:
     {
       "repuestoId": 4,
       "cantidad": 2
-    },
-    {
-      "repuestoId": 7,
-      "cantidad": 1
     }
   ]
 }
 ```
 
-Workorders almacena únicamente la referencia lógica del repuesto:
+Workorders almacena únicamente:
 
-- identificador;
-- cantidad.
+- identificador lógico del repuesto;
+- cantidad utilizada.
 
-El nombre, descripción y stock pertenecen al microservicio Catalog.
+La información propia del repuesto, como nombre, descripción y stock, pertenece a Catalog.
 
-Los repuestos utilizados por cada orden se persisten mediante:
+## Persistencia de repuestos
+
+Los repuestos asociados a una orden se almacenan mediante la estructura:
 
 ```text
 orden_repuestos
 ```
 
-No existe una relación JPA entre Workorders y Catalog, ya que ambos corresponden a microservicios independientes.
+No existe una relación JPA directa entre las entidades de Workorders y Catalog.
+
+Ambos corresponden a microservicios separados.
 
 ## Integración con Catalog
 
-Cuando una orden pasa de:
+Cuando una orden cambia de:
 
 ```text
-CREADA → ASIGNADA
+CREADA
+→ ASIGNADA
 ```
 
-Workorders coordina el consumo de repuestos con Catalog.
+y utiliza repuestos, Workorders llama internamente a Catalog.
 
-Si la orden contiene repuestos, Workorders realiza una solicitud HTTP interna hacia:
+Endpoint:
 
 ```http
 POST /api/catalog/spare-parts/discount-stock
 ```
 
-Ejemplo de solicitud enviada a Catalog:
+Ejemplo:
 
 ```json
 {
@@ -255,19 +321,27 @@ Ejemplo de solicitud enviada a Catalog:
 }
 ```
 
-Catalog es responsable de:
+El flujo es:
 
-- comprobar que los repuestos existan;
-- comprobar que exista stock suficiente;
-- descontar las cantidades solicitadas;
-- evitar descuentos duplicados para una misma orden;
-- validar que un reintento mantenga los mismos repuestos y cantidades.
+```text
+Workorders
+   ↓
+Catalog
+   ↓
+validación de repuestos
+   ↓
+validación de stock
+   ↓
+descuento de stock
+   ↓
+Oracle RDS
+```
 
-Si una orden no requiere repuestos, Workorders puede asignarla sin realizar una solicitud de descuento a Catalog.
+Si la orden no utiliza repuestos, Workorders puede asignarla sin llamar a Catalog.
 
 ## Flujo de asignación
 
-El flujo implementado es:
+El proceso implementado es:
 
 ```text
 Orden CREADA
@@ -276,7 +350,7 @@ Workorders valida la transición
       ↓
 Workorders valida el técnico
       ↓
-¿La orden utiliza repuestos?
+¿Utiliza repuestos?
       │
       ├── No
       │     ↓
@@ -284,9 +358,11 @@ Workorders valida el técnico
       │
       └── Sí
             ↓
-        Workorders llama a Catalog
+        llama a Catalog
             ↓
-        Catalog valida y descuenta stock
+        Catalog valida stock
+            ↓
+        Catalog descuenta stock
             ↓
         Catalog responde correctamente
       ↓
@@ -295,61 +371,165 @@ Workorders almacena los repuestos
 Workorders cambia la orden a ASIGNADA
 ```
 
-Workorders no guarda el nuevo estado ni los repuestos antes de que Catalog acepte el descuento.
+Workorders no confirma la asignación con repuestos si Catalog rechaza previamente el descuento.
 
 ## Reintentos
 
-Si Workorders recibe nuevamente una solicitud para colocar una orden en el mismo estado en el que ya se encuentra, la operación no vuelve a modificar los repuestos ni vuelve a solicitar un descuento de stock.
+Si se solicita nuevamente exactamente el mismo estado actual de una orden:
 
-Además, Catalog mantiene su propia lógica de idempotencia basada en el identificador de la orden.
+```text
+estado actual = estado solicitado
+```
 
-Esto permite evitar descuentos duplicados ante reintentos de una misma operación.
+Workorders devuelve la orden sin volver a modificar los repuestos ni volver a solicitar un descuento de stock.
 
-## Manejo de errores de Catalog
+Además, Catalog posee su propia lógica de idempotencia para evitar descuentos duplicados.
+
+## Errores provenientes de Catalog
 
 Workorders traduce los principales errores de Catalog.
+
+### Repuesto inexistente
 
 ```text
 Catalog 404
 → Workorders 404
-→ alguno de los repuestos solicitados no existe
 ```
+
+### Stock insuficiente o conflicto
 
 ```text
 Catalog 409
 → Workorders 409
-→ stock insuficiente o conflicto con el descuento de la orden
 ```
 
+### Catalog no disponible
+
 ```text
-Catalog no disponible
+Catalog no responde
 → Workorders 503
 ```
 
-Si Catalog rechaza la operación, Workorders no cambia la orden a `ASIGNADA`.
+Si Catalog rechaza la operación, Workorders no finaliza el cambio a `ASIGNADA`.
+
+## Eliminación de órdenes
+
+La eliminación utiliza:
+
+```http
+DELETE /api/workorders/{id}
+```
+
+Solo se pueden eliminar órdenes en estado:
+
+```text
+CREADA
+```
+
+o:
+
+```text
+CANCELADA
+```
+
+Si la orden está en otro estado, se responde:
+
+```text
+409 Conflict
+```
 
 ## Persistencia
 
-Workorders persiste en Oracle información relacionada con:
+Workorders utiliza Oracle Database en Amazon RDS.
 
-- órdenes de trabajo;
+Persiste información relacionada con:
+
+- identificador de la orden;
 - servicio asociado;
+- descripción;
+- dirección;
 - solicitante;
-- técnico asignado;
-- estado actual;
-- fechas de creación y actualización;
+- técnico;
+- estado;
+- fecha de creación;
+- fecha de actualización;
 - usuario que realizó la última actualización;
-- repuestos asociados a la orden.
+- repuestos asociados.
 
-Los identificadores pertenecientes a otros microservicios, como `servicioId` y `repuestoId`, se almacenan como referencias lógicas.
+Los identificadores como:
+
+```text
+servicioId
+repuestoId
+```
+
+son referencias lógicas hacia información perteneciente a otros microservicios.
+
+## Configuración de Oracle
+
+La conexión utiliza variables de entorno:
+
+```text
+DB_URL
+DB_USERNAME
+DB_PASSWORD
+```
+
+La URL debe tener formato JDBC compatible con Oracle.
+
+Ejemplo conceptual:
+
+```text
+jdbc:oracle:thin:@//HOST:1521/SERVICIO
+```
+
+Las credenciales reales no deben almacenarse en Git.
+
+## Hibernate
+
+Durante esta etapa se utiliza:
+
+```properties
+spring.jpa.hibernate.ddl-auto=update
+```
+
+Hibernate actualiza el esquema utilizado por el microservicio durante el desarrollo.
+
+## Comunicación con Catalog
+
+La URL de Catalog se configura mediante:
+
+```text
+CATALOG_URL
+```
+
+La propiedad utilizada es:
+
+```properties
+catalog.url=${CATALOG_URL:http://catalog:8081}
+```
+
+En Docker se utiliza:
+
+```text
+http://catalog:8081
+```
+
+En una ejecución local puede configurarse:
+
+```text
+http://localhost:8081
+```
 
 ## Seguridad
 
-Workorders incluye configuración de Spring Security como OAuth2 Resource Server para validación de JWT.
+Workorders está configurado como OAuth2 Resource Server.
 
-La configuración utiliza Microsoft Entra ID como emisor de los tokens.
+Utiliza Microsoft Entra ID como emisor de los JWT y valida la audience correspondiente a DigitalFix API.
 
-La integración de seguridad completa debe mantenerse coherente con el flujo:
+El BFF reenvía el Bearer token recibido desde el frontend.
+
+Flujo:
 
 ```text
 Frontend
@@ -358,9 +538,53 @@ Frontend
 → Workorders
 ```
 
-La configuración definitiva de propagación y validación de tokens se revisará junto con BFF, API Gateway e Infra.
+El cambio de estado también considera los roles:
 
-## Verificación
+```text
+Admin
+Operador
+```
+
+como roles con capacidad de gestión de órdenes.
+
+Las validaciones de acceso generales también se aplican previamente en el BFF.
+
+## Configuración principal
+
+El archivo:
+
+```text
+src/main/resources/application.properties
+```
+
+configura:
+
+- puerto `8082`;
+- Oracle RDS;
+- Hibernate;
+- issuer JWT;
+- audience JWT;
+- URL interna de Catalog.
+
+## Ejecución local
+
+Configurar primero las variables de entorno de Oracle.
+
+Después ejecutar:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+El servicio queda disponible en:
+
+```text
+http://localhost:8082
+```
+
+Para probar operaciones que utilicen repuestos, Catalog también debe encontrarse disponible.
+
+## Pruebas
 
 Ejecutar:
 
@@ -368,104 +592,162 @@ Ejecutar:
 .\mvnw.cmd verify
 ```
 
-La suite actual verifica principalmente:
+La suite cubre principalmente:
 
 - carga del contexto de Spring;
 - controlador de órdenes;
 - validaciones de entrada;
 - respuestas HTTP;
 - persistencia JPA;
-- persistencia utilizando H2 durante las pruebas.
+- ejecución con H2 durante las pruebas.
 
-Se verificó con `mvnw verify` que:
-
-- la incorporación del cliente de Catalog compila correctamente;
-- Workorders puede utilizar el contrato de descuento de stock;
-- el manejo de repuestos no rompe las pruebas existentes;
-- la configuración necesaria para Catalog puede cargarse correctamente durante las pruebas.
-
-Actualmente las pruebas existentes no realizan una integración HTTP real entre Workorders y Catalog.
-
-La comunicación real entre ambos microservicios debe comprobarse durante la prueba integrada del sistema.
-
-## Despliegue integrado
-
-Workorders funciona como microservicio interno.
-
-El flujo esperado es:
+Las pruebas automatizadas no sustituyen la comprobación integrada real entre:
 
 ```text
-Frontend
-    ↓
-API Gateway
-    ↓
 BFF
-    ↓
+→ Workorders
+→ Catalog
+→ Oracle RDS
+```
+
+Ese flujo también se verifica mediante pruebas funcionales del sistema desplegado.
+
+## Docker
+
+Workorders se construye utilizando su:
+
+```text
+Dockerfile
+```
+
+La ejecución conjunta del backend se administra desde:
+
+```text
+digitalfix-infra/docker-compose.yml
+```
+
+El Compose central ejecuta:
+
+```text
+BFF
+Catalog
 Workorders
-    ├──→ Catalog
-    │       ↓
-    │    Oracle RDS
-    │
-    ↓
+```
+
+Workorders utiliza el nombre DNS interno:
+
+```text
+catalog
+```
+
+para comunicarse con Catalog dentro de la red Docker.
+
+El puerto `8082` no se publica directamente hacia Internet.
+
+## Despliegue actual
+
+Actualmente Workorders se ejecuta en contenedor dentro de la instancia EC2 junto con BFF y Catalog.
+
+El flujo operativo es:
+
+```text
+Angular
+   ↓
+API Gateway
+   ↓
+BFF en EC2
+   ↓
+Workorders en EC2
+   ├──→ Catalog en EC2
+   │       ↓
+   │    Oracle RDS
+   │
+   ↓
 Oracle RDS
 ```
 
-Catalog y Workorders se comunican dentro de la infraestructura interna.
+La comunicación entre los microservicios se realiza dentro de la red Docker.
 
-Workorders no debe publicar directamente su puerto `8082` hacia Internet.
+## Manejo de errores
 
-La configuración de contenedores, direcciones internas y variables de entorno se administra desde:
+Los principales códigos utilizados son:
 
 ```text
-digitalfix-infra
+400 Bad Request
+404 Not Found
+409 Conflict
+503 Service Unavailable
 ```
 
-Antes del despliegue final se deben revisar:
+Se utilizan para representar:
 
-- credenciales Oracle;
-- `CATALOG_URL`;
-- direcciones internas entre microservicios;
-- configuración JWT;
-- BFF;
-- API Gateway;
-- CORS.
+- solicitudes inválidas;
+- órdenes inexistentes;
+- repuestos inexistentes;
+- transiciones no permitidas;
+- stock insuficiente;
+- conflictos de estado;
+- indisponibilidad de Catalog.
+
+## Estructura principal
+
+El proyecto se organiza por responsabilidades:
+
+```text
+controller
+service
+repository
+entity
+dto
+mapper
+client
+config
+```
+
+Los controllers exponen los endpoints HTTP.
+
+Los services contienen las reglas de negocio.
+
+Los repositories administran la persistencia.
+
+Los clients permiten la comunicación con Catalog.
+
+Los DTOs representan solicitudes y respuestas.
+
+Los mappers separan las entidades JPA de los contratos HTTP.
 
 ## Estado actual
 
-Actualmente se encuentra implementado:
+Actualmente se encuentran operativos:
 
-- CRUD base de órdenes;
-- flujo de estados;
+- creación de órdenes;
+- consulta de órdenes;
+- listado global;
+- listado por solicitante;
+- actualización de órdenes creadas;
+- eliminación de órdenes creadas o canceladas;
+- flujo completo de estados;
+- cancelación de órdenes;
 - asignación de técnico;
-- almacenamiento de repuestos por orden;
-- comunicación HTTP Workorders → Catalog;
-- descuento de stock al asignar una orden;
-- manejo de órdenes sin repuestos;
-- prevención de descuentos repetidos por reintento;
-- manejo de errores provenientes de Catalog.
+- asociación de repuestos;
+- comunicación Workorders → Catalog;
+- descuento real de stock;
+- prevención de descuentos duplicados;
+- manejo de errores de Catalog;
+- persistencia real en Oracle RDS;
+- integración con BFF;
+- integración con el despliegue Docker en EC2.
 
-La siguiente etapa corresponde a integrar este contrato con BFF, frontend e infraestructura para realizar el flujo completo.
+El flujo completo con frontend, API Gateway, BFF, Catalog y Oracle RDS se encuentra integrado y fue probado funcionalmente.
 
-## Refactor por capas (5 de octubre de 2026)
+## Documentación técnica
 
-Los controllers utilizan DTOs independientes en `dto/request` y `dto/response`.
-La capa service coordina persistencia y mapeo mediante `mapper`, sin exponer
-entidades JPA en los contratos HTTP. Las validaciones, rutas, códigos, estados,
-reglas de dominio y configuración existentes se conservan.
-La configuración de RestClient se encuentra en `config/client`; la comunicación con Catalog sigue siendo síncrona.
+Los archivos de refactor existentes conservan información histórica sobre reorganización por capas, convenciones técnicas y uso de Lombok.
 
-La revisión y las decisiones integradas se documentan en
-[REFACTOR.md del BFF](../digitalfix-ms-bff/REFACTOR.md), disponible en el workspace
-con los repositorios hermanos. No se incorpora RabbitMQ ni Kafka.
+El `README.md` representa el estado funcional actual del microservicio.
 
+## Flujo de trabajo
 
-## Convención técnica y Lombok (9 de octubre de 2026)
+Los cambios se desarrollan en ramas independientes y se integran a `main` mediante Pull Request.
 
-Se aplica dominio en español + sufijo técnico en inglés: Controller, Service,
-Repository, Client, Request, Response, Config, Mapper y Exception. Los DTOs record
-se conservan; Lombok reemplaza únicamente código repetitivo de clases mutables
-y constructores simples. Los contratos y la configuración existentes se preservan.
-
-[REFACTOR_LOMBOK.md](REFACTOR_LOMBOK.md) contiene el inventario de renombrados,
-las decisiones de compatibilidad, resultados de Maven con Java 21 y deuda técnica.
-Los nombres que aparecen en secciones anteriores corresponden a etapas previas.
+La rama `main` representa la versión estable utilizada para la entrega.
