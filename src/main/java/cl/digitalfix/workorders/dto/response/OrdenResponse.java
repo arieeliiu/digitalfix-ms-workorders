@@ -14,5 +14,7 @@ public record OrdenResponse(
         String tecnicoId,
         String actualizadoPor,
         Instant fechaActualizacion,
-        List<RepuestoOrdenResponse> repuestos
+        List<RepuestoOrdenResponse> repuestos,
+        String emailContacto,
+        String emailTecnico
 ) {}

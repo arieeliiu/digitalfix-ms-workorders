@@ -13,6 +13,7 @@ public final class OrdenMapper {
                 orden.getFechaCreacion(), orden.getEstado(), orden.getTecnicoId(),
                 orden.getActualizadoPor(), orden.getFechaActualizacion(),
                 orden.getRepuestos().stream().map(repuesto -> new RepuestoOrdenResponse(
-                        repuesto.getRepuestoId(), repuesto.getCantidad())).toList());
+                        repuesto.getRepuestoId(), repuesto.getCantidad())).toList(),
+                orden.getEmailContacto(), orden.getEmailTecnico());
     }
 }

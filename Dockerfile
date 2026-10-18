@@ -9,6 +9,9 @@ RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
 COPY src/ src/
 RUN ./mvnw -B -DskipTests package
 
+FROM compilacion AS pruebas
+CMD ["./mvnw", "-B", "test"]
+
 # Ejecutar el servicio sin permisos de administrador
 FROM eclipse-temurin:21-jre
 WORKDIR /app

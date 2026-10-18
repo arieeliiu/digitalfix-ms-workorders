@@ -12,12 +12,14 @@ import lombok.RequiredArgsConstructor;
 import cl.digitalfix.workorders.client.CatalogoClient;
 import cl.digitalfix.workorders.dto.request.ActualizarOrdenRequest;
 import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
+import cl.digitalfix.workorders.dto.request.ContactosRequest;
 import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.workorders.dto.response.OrdenResponse;
 import cl.digitalfix.workorders.entity.EstadoOrden;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.entity.RepuestoOrden;
 import cl.digitalfix.workorders.mapper.OrdenMapper;
+import cl.digitalfix.workorders.messaging.NotificacionesOrden;
 import cl.digitalfix.workorders.repository.OrdenRepository;
 
 import static cl.digitalfix.workorders.mapper.OrdenMapper.respuesta;
@@ -29,6 +31,7 @@ public class OrdenService {
 
     private final OrdenRepository repositorio;
     private final CatalogoClient catalogCliente;
+    private final NotificacionesOrden notificaciones;
 
     @Transactional
     public OrdenResponse crearOrden(NuevaOrdenRequest solicitud) {
@@ -39,6 +42,7 @@ public class OrdenService {
                 solicitud.solicitanteId().trim()
         );
 
+        orden.actualizarContactos(solicitud.emailContacto(), null);
         return respuesta(repositorio.save(orden));
     }
 
@@ -122,6 +126,8 @@ public class OrdenService {
 
         if (siguiente == EstadoOrden.ASIGNADA) {
 
+            orden.actualizarContactos(null, datos.emailTecnico());
+
             if (datos.tecnicoId() != null) {
                 tecnico = datos.tecnicoId().trim();
             }
@@ -181,6 +187,19 @@ public class OrdenService {
                 tecnico,
                 actorId);
 
+        var instantanea = respuesta(repositorio.save(orden));
+        notificaciones.despuesDelCommit(instantanea);
+        return instantanea;
+    }
+
+    @Transactional
+    public OrdenResponse actualizarContactos(Long id,
+            ContactosRequest datos,
+            String actorId, boolean gestor) {
+        var orden = ordenParaGestionar(id, actorId, gestor);
+        if (!gestor && datos.emailTecnico() != null)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El correo del técnico requiere gestión de órdenes");
+        orden.actualizarContactos(datos.emailContacto(), datos.emailTecnico());
         return respuesta(repositorio.save(orden));
     }
 

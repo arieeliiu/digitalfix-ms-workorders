@@ -1,0 +1,41 @@
+[
+  {
+    "schemaVersion":"1.0", "type":"ORDEN_ASIGNADA",
+    "eventId":"550e8400-e29b-41d4-a716-446655440001",
+    "timestamp":"2026-10-18T15:00:00Z",
+    "traceId":"550e8400-e29b-41d4-a716-446655440010", "correlationId":"15",
+    "payload":{"ordenId":15,"emailContacto":"cliente@example.org"}
+  },
+  {
+    "schemaVersion":"1.0", "type":"DESPACHO_TECNICO",
+    "eventId":"550e8400-e29b-41d4-a716-446655440002",
+    "timestamp":"2026-10-18T15:00:00Z",
+    "traceId":"550e8400-e29b-41d4-a716-446655440010", "correlationId":"15",
+    "payload":{"ordenId":15,"emailTecnico":"tecnico@example.org","tecnicoId":"tecnico-01",
+      "servicioId":2,"servicioNombre":"Revisión eléctrica","direccion":"Avenida Ñuñoa 123"}
+  },
+  {
+    "schemaVersion":"1.0", "type":"TECNICO_EN_CAMINO",
+    "eventId":"550e8400-e29b-41d4-a716-446655440003",
+    "timestamp":"2026-10-18T16:00:00Z",
+    "traceId":"550e8400-e29b-41d4-a716-446655440011", "correlationId":"15",
+    "payload":{"ordenId":15,"emailContacto":"cliente@example.org"}
+  },
+  {
+    "schemaVersion":"1.0", "type":"ORDEN_CERRADA",
+    "eventId":"550e8400-e29b-41d4-a716-446655440004",
+    "timestamp":"2026-10-18T18:00:00Z",
+    "traceId":"550e8400-e29b-41d4-a716-446655440012", "correlationId":"15",
+    "payload":{"ordenId":15,"emailContacto":"cliente@example.org"}
+  },
+  {
+    "schemaVersion":"1.0", "type":"GENERAR_REPORTE",
+    "eventId":"550e8400-e29b-41d4-a716-446655440005",
+    "timestamp":"2026-10-18T18:00:00Z",
+    "traceId":"550e8400-e29b-41d4-a716-446655440012", "correlationId":"15",
+    "payload":{"ordenId":15,"estado":"CERRADA","solicitanteId":"oid-del-solicitante","tecnicoId":"tecnico-01",
+      "servicioId":2,"descripcion":"Revisión y reparación de instalación eléctrica","direccion":"Avenida Ñuñoa 123",
+      "fechaCreacion":"2026-10-15T12:00:00Z","fechaCierre":"2026-10-18T18:00:00Z",
+      "repuestos":[{"repuestoId":4,"cantidad":2}]}
+  }
+]
