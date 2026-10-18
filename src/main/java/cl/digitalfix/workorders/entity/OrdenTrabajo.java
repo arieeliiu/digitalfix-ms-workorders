@@ -58,6 +58,12 @@ public class OrdenTrabajo {
     @Column(name = "tecnico_id", length = 100)
     private String tecnicoId;
 
+    @Column(name = "email_contacto", length = 254)
+    private String emailContacto;
+
+    @Column(name = "email_tecnico", length = 254)
+    private String emailTecnico;
+
     @Column(name = "actualizado_por", length = 100)
     private String actualizadoPor;
 
@@ -106,5 +112,11 @@ public class OrdenTrabajo {
     private void registrarCambio(String actor) {
         actualizadoPor = actor;
         fechaActualizacion = Instant.now();
+    }
+
+    public void actualizarContactos(String contacto, String tecnico) {
+        // No altera fechaActualizacion: conserva la fecha efectiva de cierre.
+        if (contacto != null) emailContacto = contacto.isBlank() ? null : contacto.trim();
+        if (tecnico != null) emailTecnico = tecnico.isBlank() ? null : tecnico.trim();
     }
 }

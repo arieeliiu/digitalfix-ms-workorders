@@ -41,6 +41,10 @@ class OrdenControllerTests {
     @MockitoBean
     private CatalogoClient catalogCliente;
 
+    // La suite MVC conserva su propósito; las transacciones se verifican con H2.
+    @MockitoBean
+    private cl.digitalfix.workorders.messaging.NotificacionesOrden notificaciones;
+
     @Test
     void filtraOrdenesPorSolicitanteEnRepositorio() throws Exception {
         when(repositorio.findBySolicitanteId("usuario-prueba")).thenReturn(List.of(ordenEjemplo()));

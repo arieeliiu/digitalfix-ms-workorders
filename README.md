@@ -2,6 +2,21 @@
 
 Microservicio encargado de administrar las órdenes de trabajo de DigitalFix, controlar su ciclo de estados y coordinar el descuento de repuestos con Catalog durante la asignación de una orden.
 
+## Evaluación 2 — Paso 5
+
+Workorders también publica comandos RabbitMQ **después del commit de la orden**, conservando el descuento síncrono con Catalog. La mensajería se habilita explícitamente con `DIGITALFIX_RABBIT_ENABLED=true`; por defecto permanece deshabilitada para los entornos de la Evaluación 1.
+
+Documentación de esta entrega:
+
+- [Productor, contactos, configuración y límites](docs/MENSAJERIA.md).
+- [Ejemplos JSON completos de los cinco comandos](docs/contratos.json).
+- [Resultados y matriz de evidencias](docs/EVIDENCIAS.md).
+- [Migración aditiva de contactos para Oracle](docs/oracle-contactos.sql).
+
+Se incorporan `emailContacto` opcional al crear, `emailTecnico` opcional al asignar y `PATCH /api/workorders/{id}/contactos` para actualizar contactos autorizadamente, sin alterar estados, fechas de transición ni stock. Las respuestas incorporan ambos campos, que pueden ser null. BFF/Frontend y Compose central requieren la adaptación documentada para el Paso 6; no fueron modificados aquí.
+
+Las comprobaciones nuevas de transacciones se realizaron con H2 y las de publicación con RabbitMQ real aislado. La validación específica de esta versión contra Oracle real y el flujo completo desplegado sigue pendiente; las referencias posteriores al despliegue describen la base de la Evaluación 1.
+
 ## Integrantes
 
 - Ariel Molina

@@ -1,6 +1,7 @@
 package cl.digitalfix.workorders.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -21,6 +22,11 @@ public record NuevaOrdenRequest(
 
     @NotBlank(message = "El solicitante es obligatorio")
     @Size(max = 100, message = "El solicitante admite hasta 100 caracteres")
-    String solicitanteId
+    String solicitanteId,
+    @Email @Size(max = 254)
+    String emailContacto
 ) {
+    public NuevaOrdenRequest(Long servicioId, String descripcion, String direccion, String solicitanteId) {
+        this(servicioId, descripcion, direccion, solicitanteId, null);
+    }
 }

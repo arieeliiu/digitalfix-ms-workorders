@@ -9,6 +9,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.workorders.dto.request.ActualizarOrdenRequest;
 import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
+import cl.digitalfix.workorders.dto.request.ContactosRequest;
 import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.workorders.dto.response.OrdenResponse;
 import cl.digitalfix.workorders.service.OrdenService;
@@ -103,5 +106,17 @@ public class OrdenController {
         return roles != null
                 && (roles.contains("Operador")
                     || roles.contains("Admin"));
+    }
+
+    @PatchMapping("/{id}/contactos")
+    public OrdenResponse actualizarContactos(@PathVariable Long id,
+            @Valid @RequestBody ContactosRequest solicitud,
+            JwtAuthenticationToken autenticacion) {
+        if (autenticacion == null || !autenticacion.isAuthenticated())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        String oid = autenticacion.getToken().getClaimAsString("oid");
+        if (oid == null || oid.isBlank())
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        return servicio.actualizarContactos(id, solicitud, oid, puedeGestionarOrdenes(autenticacion));
     }
 }
