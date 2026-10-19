@@ -64,12 +64,12 @@ public class OrdenController {
     public OrdenResponse actualizarOrden(
             @PathVariable Long id,
             @Valid @RequestBody ActualizarOrdenRequest solicitud,
-            @RequestParam String solicitanteId) {
+            JwtAuthenticationToken autenticacion) {
 
         return servicio.actualizarOrden(
                 id,
                 solicitud,
-                solicitanteId);
+                actorAutenticado(autenticacion), esAdmin(autenticacion));
     }
 
     @PutMapping("/{id}/status")
@@ -90,11 +90,27 @@ public class OrdenController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void eliminarOrden(
             @PathVariable Long id,
-            @RequestParam String solicitanteId) {
+            JwtAuthenticationToken autenticacion) {
 
         servicio.eliminarOrden(
                 id,
-                solicitanteId);
+                actorAutenticado(autenticacion), esAdmin(autenticacion));
+    }
+
+    private String actorAutenticado(JwtAuthenticationToken autenticacion) {
+        if (autenticacion == null || !autenticacion.isAuthenticated())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        var jwt = autenticacion.getToken();
+        String oid = jwt.getClaimAsString("oid");
+        var roles = jwt.getClaimAsStringList("roles");
+        if (oid == null || oid.isBlank() || oid.length() > 100 || roles == null
+                || roles.stream().noneMatch(java.util.List.of("Admin", "Operador", "Cliente")::contains))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        return oid;
+    }
+
+    private boolean esAdmin(JwtAuthenticationToken autenticacion) {
+        return autenticacion.getToken().getClaimAsStringList("roles").contains("Admin");
     }
 
     private boolean puedeGestionarOrdenes(

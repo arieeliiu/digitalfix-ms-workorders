@@ -72,11 +72,11 @@ public class OrdenService {
     public OrdenResponse actualizarOrden(
             Long id,
             ActualizarOrdenRequest datos,
-            String solicitanteId) {
+            String solicitanteId, boolean esAdmin) {
 
-        var orden = ordenPropiaParaModificar(
+        var orden = ordenParaGestionar(
                 id,
-                solicitanteId);
+                solicitanteId, esAdmin);
 
         if (!"CREADA".equals(orden.getEstado())) {
             throw new ResponseStatusException(
@@ -206,11 +206,11 @@ public class OrdenService {
     @Transactional
     public void eliminarOrden(
             Long id,
-            String solicitanteId) {
+            String solicitanteId, boolean esAdmin) {
 
-        var orden = ordenPropiaParaModificar(
+        var orden = ordenParaGestionar(
                 id,
-                solicitanteId);
+                solicitanteId, esAdmin);
 
         if (!"CREADA".equals(orden.getEstado())
                 && !"CANCELADA".equals(orden.getEstado())) {
@@ -221,27 +221,6 @@ public class OrdenService {
         }
 
         repositorio.delete(orden);
-    }
-
-    private OrdenTrabajo ordenPropiaParaModificar(
-            Long id,
-            String solicitanteId) {
-
-        var orden = repositorio.findByIdParaModificar(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Orden no encontrada"));
-
-        if (solicitanteId == null
-                || !solicitanteId.equals(
-                        orden.getSolicitanteId())) {
-
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Orden no encontrada");
-        }
-
-        return orden;
     }
 
     private OrdenTrabajo ordenParaGestionar(
