@@ -46,7 +46,7 @@ class OrdenServiceTests {
         var error = assertThrows(ResponseStatusException.class, () -> servicio.cambiarEstado(
                 orden.id(), new CambioEstadoRequest(EstadoOrden.EN_EJECUCION, "tecnico", null), "operador", true));
         assertEquals(409, error.getStatusCode().value());
-        var ajena = assertThrows(ResponseStatusException.class, () -> servicio.eliminarOrden(orden.id(), "otro"));
+        var ajena = assertThrows(ResponseStatusException.class, () -> servicio.eliminarOrden(orden.id(), "otro", false));
         assertEquals(404, ajena.getStatusCode().value());
         verifyNoInteractions(catalog);
     }
@@ -57,7 +57,7 @@ class OrdenServiceTests {
         var cancelada = servicio.cambiarEstado(orden.id(),
                 new CambioEstadoRequest(EstadoOrden.CANCELADA, null, null), "cliente", false);
         assertEquals("CANCELADA", cancelada.estado());
-        servicio.eliminarOrden(orden.id(), "cliente");
+        servicio.eliminarOrden(orden.id(), "cliente", false);
         var error = assertThrows(ResponseStatusException.class, () -> servicio.consultarOrden(orden.id()));
         assertEquals(404, error.getStatusCode().value());
         verifyNoInteractions(catalog);

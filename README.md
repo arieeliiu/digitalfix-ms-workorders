@@ -153,11 +153,22 @@ La actualización utiliza:
 PUT /api/workorders/{id}
 ```
 
-y requiere internamente:
+PUT y DELETE obtienen el actor desde el `oid` del JWT autenticado y validan su rol.
+No usan `solicitanteId`, `admin` ni roles proporcionados en parámetros/cuerpo para
+autorizar. Admin puede operar sobre órdenes ajenas; Cliente y Operador solo sobre
+las propias. El propietario no cambia y la auditoría registra al actor real.
+Las restricciones de estado se aplican a todos, incluido Admin.
 
-```text
-solicitanteId
-```
+La edición de correo reutiliza PATCH `/contactos`, independiente de PUT: omisión/null
+conserva el contacto y cadena vacía lo elimina. No publica notificaciones ni modifica
+estado, stock o fecha de transición. El frontend informa guardado parcial si PUT
+termina y PATCH falla; no se promete atomicidad entre ambas llamadas.
+
+Validación del ajuste (19/10/2026): `./mvnw.cmd -B verify`, 41 aprobadas, 0 fallidas
+y 2 pruebas opcionales de RabbitMQ real omitidas. Las nuevas pruebas usan H2 y un
+principal JWT local en MVC; no verifican Entra/Oracle reales. Integrar Workorders
+antes de BFF y Frontend; los parámetros antiguos pueden recibirse pero se ignoran
+en PUT/DELETE y nunca sustituyen la identidad autenticada.
 
 Workorders permite editar únicamente órdenes que todavía se encuentren en estado:
 
