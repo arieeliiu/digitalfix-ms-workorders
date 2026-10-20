@@ -84,11 +84,15 @@ public class OrdenService {
                 id,
                 solicitanteId, esAdmin);
 
-        if (!"CREADA".equals(orden.getEstado())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Solo se pueden editar órdenes creadas");
-        }
+        boolean creada = "CREADA".equals(orden.getEstado());
+        boolean activa = List.of("ASIGNADA", "EN_DESPLAZAMIENTO", "EN_EJECUCION")
+                .contains(orden.getEstado());
+        if (!creada && !activa)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Solo se pueden editar órdenes activas");
+        if (activa && !esAdmin)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Se requiere rol Admin u Operador para editar una orden asignada");
 
         orden.actualizar(
                 datos.servicioId(),
