@@ -74,23 +74,30 @@ public class OrdenService {
                 .toList();
     }
 
+    // Mantiene la firma anterior para llamadas internas y pruebas existentes.
+    @Transactional
+    public OrdenResponse actualizarOrden(Long id, ActualizarOrdenRequest datos,
+            String solicitanteId, boolean esAdmin) {
+        return actualizarOrden(id, datos, solicitanteId, esAdmin, esAdmin);
+    }
+
     @Transactional
     public OrdenResponse actualizarOrden(
             Long id,
             ActualizarOrdenRequest datos,
-            String solicitanteId, boolean esAdmin) {
+            String solicitanteId, boolean esAdmin, boolean gestor) {
 
-        var orden = ordenParaGestionar(
-                id,
-                solicitanteId, esAdmin);
-
+        var orden = ordenParaGestionar(id, solicitanteId, esAdmin || gestor);
         boolean creada = "CREADA".equals(orden.getEstado());
         boolean activa = List.of("ASIGNADA", "EN_DESPLAZAMIENTO", "EN_EJECUCION")
                 .contains(orden.getEstado());
         if (!creada && !activa)
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Solo se pueden editar órdenes activas");
-        if (activa && !esAdmin)
+        // Operador conserva la regla de propiedad en CREADA, Admin puede editar ajenas.
+        if (creada && !esAdmin && !solicitanteId.equals(orden.getSolicitanteId()))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden no encontrada");
+        if (activa && !gestor)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Se requiere rol Admin u Operador para editar una orden asignada");
 
