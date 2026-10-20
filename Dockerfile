@@ -1,25 +1,20 @@
-# Compilar el servicio con Java 21
-FROM eclipse-temurin:21-jdk AS compilacion
+# Dockerfile estándar DigitalFix - workorders (puerto 8082)
+
+# ---------- build ----------
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /src
+COPY pom.xml .
+RUN mvn -q -B dependency:go-offline
+COPY src ./src
+RUN mvn -q -B package -DskipTests
+
+# ---------- runtime ----------
+FROM eclipse-temurin:21-jre-alpine
+RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
+COPY --from=build /src/target/*.jar app.jar
+USER app
 
-COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
-RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
-
-COPY src/ src/
-RUN ./mvnw -B -DskipTests package
-
-FROM compilacion AS pruebas
-CMD ["./mvnw", "-B", "test"]
-
-# Ejecutar el servicio sin permisos de administrador
-FROM eclipse-temurin:21-jre
-WORKDIR /app
-
-RUN groupadd --system digitalfix \
-    && useradd --system --gid digitalfix digitalfix
-
-COPY --from=compilacion /app/target/*.jar app.jar
-
-USER digitalfix
-ENTRYPOINT ["java", "-jar", "app.jar"]
+EXPOSE 8082
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
