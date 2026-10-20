@@ -11,6 +11,10 @@ import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.workorders.client.CatalogoClient;
 import cl.digitalfix.workorders.dto.request.ActualizarOrdenRequest;
+import cl.digitalfix.workorders.dto.request.ActualizarRepuestosRequest;
+import cl.digitalfix.workorders.dto.request.RepuestoRequest;
+import java.util.Map;
+import java.util.TreeMap;
 import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
 import cl.digitalfix.workorders.dto.request.ContactosRequest;
 import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
@@ -70,21 +74,32 @@ public class OrdenService {
                 .toList();
     }
 
+    // Mantiene la firma anterior para llamadas internas y pruebas existentes.
+    @Transactional
+    public OrdenResponse actualizarOrden(Long id, ActualizarOrdenRequest datos,
+            String solicitanteId, boolean esAdmin) {
+        return actualizarOrden(id, datos, solicitanteId, esAdmin, esAdmin);
+    }
+
     @Transactional
     public OrdenResponse actualizarOrden(
             Long id,
             ActualizarOrdenRequest datos,
-            String solicitanteId, boolean esAdmin) {
+            String solicitanteId, boolean esAdmin, boolean gestor) {
 
-        var orden = ordenParaGestionar(
-                id,
-                solicitanteId, esAdmin);
-
-        if (!"CREADA".equals(orden.getEstado())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Solo se pueden editar órdenes creadas");
-        }
+        var orden = ordenParaGestionar(id, solicitanteId, esAdmin || gestor);
+        boolean creada = "CREADA".equals(orden.getEstado());
+        boolean activa = List.of("ASIGNADA", "EN_DESPLAZAMIENTO", "EN_EJECUCION")
+                .contains(orden.getEstado());
+        if (!creada && !activa)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Solo se pueden editar órdenes activas");
+        // Operador conserva la regla de propiedad en CREADA, Admin puede editar ajenas.
+        if (creada && !esAdmin && !solicitanteId.equals(orden.getSolicitanteId()))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden no encontrada");
+        if (activa && !gestor)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Se requiere rol Admin u Operador para editar una orden asignada");
 
         orden.actualizar(
                 datos.servicioId(),
@@ -207,6 +222,48 @@ public class OrdenService {
             exigirCorreo(datos.emailTecnico());
         orden.actualizarContactos(datos.emailContacto(), datos.emailTecnico());
         return respuesta(repositorio.save(orden));
+    }
+
+    // Ajusta las cantidades absolutas con un estado anterior esperado.
+    // El stock se concilia en Catalog sin repetir descuentos al reintentar.
+    @Transactional
+    public OrdenResponse actualizarRepuestos(Long id, ActualizarRepuestosRequest solicitud,
+            String actorId, boolean gestor) {
+        if (!gestor) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        var orden = ordenParaGestionar(id, actorId, true);
+        var estado = EstadoOrden.valueOf(orden.getEstado());
+        if (estado != EstadoOrden.ASIGNADA && estado != EstadoOrden.EN_DESPLAZAMIENTO
+                && estado != EstadoOrden.EN_EJECUCION)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Los repuestos solo pueden editarse en órdenes asignadas o en ejecución");
+        var anteriores = normalizarRepuestos(solicitud.anteriores());
+        var nuevos = normalizarRepuestos(solicitud.nuevos());
+        var actual = new TreeMap<Long, Integer>();
+        orden.getRepuestos().forEach(r -> actual.merge(r.getRepuestoId(), r.getCantidad(), Integer::sum));
+        // Reintento tras éxito: la versión deseada ya está guardada.
+        if (actual.equals(nuevos)) return respuesta(orden);
+        if (!actual.equals(anteriores))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Los repuestos cambiaron. Actualiza la orden antes de editar.");
+        var previos = actual.entrySet().stream().map(e -> new RepuestoRequest(e.getKey(), e.getValue())).toList();
+        var destino = nuevos.entrySet().stream().map(e -> new RepuestoRequest(e.getKey(), e.getValue())).toList();
+        catalogCliente.ajustarStock(id, new ActualizarRepuestosRequest(previos, destino));
+        var entidades = destino.stream().map(r -> new RepuestoOrden(r.repuestoId(), r.cantidad())).toList();
+        orden.actualizarRepuestos(entidades, actorId);
+        return respuesta(repositorio.save(orden));
+    }
+
+    private Map<Long, Integer> normalizarRepuestos(List<RepuestoRequest> lista) {
+        if (lista == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        var resultado = new TreeMap<Long, Integer>();
+        for (var repuesto : lista) {
+            if (repuesto == null || repuesto.repuestoId() == null || repuesto.repuestoId() <= 0
+                    || repuesto.cantidad() == null || repuesto.cantidad() <= 0
+                    || resultado.putIfAbsent(repuesto.repuestoId(), repuesto.cantidad()) != null)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Repuesto duplicado o cantidad inválida");
+        }
+        return resultado;
     }
 
     @Transactional

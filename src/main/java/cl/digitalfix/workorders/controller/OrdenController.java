@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.workorders.dto.request.ActualizarOrdenRequest;
+import cl.digitalfix.workorders.dto.request.ActualizarRepuestosRequest;
 import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
 import cl.digitalfix.workorders.dto.request.ContactosRequest;
 import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
@@ -69,7 +70,8 @@ public class OrdenController {
         return servicio.actualizarOrden(
                 id,
                 solicitud,
-                actorAutenticado(autenticacion), esAdmin(autenticacion));
+                actorAutenticado(autenticacion), esAdmin(autenticacion),
+                puedeGestionarOrdenes(autenticacion));
     }
 
     @PutMapping("/{id}/status")
@@ -122,6 +124,14 @@ public class OrdenController {
         return roles != null
                 && (roles.contains("Operador")
                     || roles.contains("Admin"));
+    }
+
+    @PutMapping("/{id}/repuestos")
+    public OrdenResponse actualizarRepuestos(@PathVariable Long id,
+            @Valid @RequestBody ActualizarRepuestosRequest solicitud,
+            JwtAuthenticationToken autenticacion) {
+        return servicio.actualizarRepuestos(id, solicitud,
+                actorAutenticado(autenticacion), puedeGestionarOrdenes(autenticacion));
     }
 
     @PatchMapping("/{id}/contactos")
