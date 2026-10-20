@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
 import cl.digitalfix.workorders.dto.request.DescontarStockCatalogoRequest;
+import cl.digitalfix.workorders.dto.request.ActualizarRepuestosRequest;
 import cl.digitalfix.workorders.dto.request.RepuestoRequest;
 
 @Component
@@ -38,6 +39,26 @@ public class CatalogoClient {
     public CatalogoClient(@Qualifier("catalogRestClient") RestClient restClient) {
         this.restClient = restClient;
     }
+
+    public void ajustarStock(Long ordenId, ActualizarRepuestosRequest solicitud) {
+        try {
+            restClient.put().uri("/api/catalog/spare-parts/adjust-order-stock")
+                .body(new AjustarStockCatalogoRequest(ordenId, solicitud.anteriores(), solicitud.nuevos()))
+                .retrieve().toBodilessEntity();
+        } catch (HttpClientErrorException.Conflict ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Stock insuficiente o datos modificados; actualiza la orden", ex);
+        } catch (HttpClientErrorException.NotFound ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Uno de los repuestos ya no existe", ex);
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "No se pudo verificar el stock con Catalog", ex);
+        }
+    }
+
+    private record AjustarStockCatalogoRequest(Long ordenId,
+            List<RepuestoRequest> anteriores, List<RepuestoRequest> nuevos) {}
 
     public void descontarStock(
             Long ordenId,
