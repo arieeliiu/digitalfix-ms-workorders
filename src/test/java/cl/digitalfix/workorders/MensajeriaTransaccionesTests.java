@@ -114,9 +114,12 @@ class MensajeriaTransaccionesTests {
         estado(orden.id(),EstadoOrden.CREADA); estado(orden.id(),EstadoOrden.CANCELADA);
         verifyNoInteractions(publicador,catalog);
     }
-    @Test void sinContactosNoBloqueaYInformeSinRepuestosSePublica() {
-        var orden = servicio.crearOrden(new NuevaOrdenRequest(2L,"Revisión","Calle","cliente"));
-        servicio.cambiarEstado(orden.id(),new CambioEstadoRequest(EstadoOrden.ASIGNADA,"tecnico",List.of()),"operador",true);
+    @Test void ordenAntiguaSinContactosContinuaYPublicaInformeSinRepuestos() {
+        var antigua = new cl.digitalfix.workorders.entity.OrdenTrabajo(2L,"Revisión","Calle","cliente");
+        var id = repositorio.saveAndFlush(antigua).getId();
+        new TransactionTemplate(transacciones).executeWithoutResult(tx ->
+            repositorio.findById(id).orElseThrow().cambiarEstado(EstadoOrden.ASIGNADA,"tecnico","operador"));
+        var orden = servicio.consultarOrden(id);
         estado(orden.id(),EstadoOrden.EN_DESPLAZAMIENTO); estado(orden.id(),EstadoOrden.EN_EJECUCION); estado(orden.id(),EstadoOrden.CERRADA);
         var comandos = enviados(1);
         assertEquals("GENERAR_REPORTE",comandos.getFirst().sobre().type());

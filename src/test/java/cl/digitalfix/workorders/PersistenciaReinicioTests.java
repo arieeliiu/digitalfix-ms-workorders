@@ -18,7 +18,7 @@ class PersistenciaReinicioTests {
         Long id;
         try (var contexto = iniciar()) {
             var orden = contexto.getBean(OrdenService.class).crearOrden(
-                new NuevaOrdenRequest(1L, "Revisión", "Calle 123", "oid-prueba"));
+                new NuevaOrdenRequest(1L, "Revisión", "Calle 123", "oid-prueba", "cliente@example.org"));
             id = orden.id();
             assertNotNull(id);
             assertEquals("CREADA", orden.estado());

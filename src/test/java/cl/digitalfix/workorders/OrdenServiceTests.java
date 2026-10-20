@@ -20,9 +20,9 @@ class OrdenServiceTests {
 
     @Test
     void asignacionReintentoYLecturaDeRepuestosMantienenContrato() {
-        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente"));
+        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente", "cliente@example.org"));
         var repuestos = List.of(new RepuestoRequest(4L, 2));
-        var solicitud = new CambioEstadoRequest(EstadoOrden.ASIGNADA, " tecnico-1 ", repuestos);
+        var solicitud = new CambioEstadoRequest(EstadoOrden.ASIGNADA, " tecnico-1 ", repuestos, "tecnico@example.org");
         var asignada = servicio.cambiarEstado(orden.id(), solicitud, "operador", true);
         assertEquals("ASIGNADA", asignada.estado());
         assertEquals("tecnico-1", asignada.tecnicoId());
@@ -42,7 +42,7 @@ class OrdenServiceTests {
 
     @Test
     void transicionInvalidaYOrdenAjenaMantienenCodigos() {
-        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente"));
+        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente", "cliente@example.org"));
         var error = assertThrows(ResponseStatusException.class, () -> servicio.cambiarEstado(
                 orden.id(), new CambioEstadoRequest(EstadoOrden.EN_EJECUCION, "tecnico", null), "operador", true));
         assertEquals(409, error.getStatusCode().value());
@@ -53,7 +53,7 @@ class OrdenServiceTests {
 
     @Test
     void cancelarYEliminarConservanSemanticaActual() {
-        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente"));
+        var orden = servicio.crearOrden(new NuevaOrdenRequest(1L, "Revisión", "Calle", "cliente", "cliente@example.org"));
         var cancelada = servicio.cambiarEstado(orden.id(),
                 new CambioEstadoRequest(EstadoOrden.CANCELADA, null, null), "cliente", false);
         assertEquals("CANCELADA", cancelada.estado());
