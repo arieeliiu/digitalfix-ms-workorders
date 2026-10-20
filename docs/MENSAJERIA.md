@@ -48,7 +48,7 @@ Asignación:
 {"status":"ASIGNADA","tecnicoId":"tecnico-01","repuestos":[{"repuestoId":4,"cantidad":2}],"emailTecnico":"tecnico@example.org"}
 ```
 
-Ambos correos son opcionales. Formato inválido o longitud excesiva en una solicitud devuelve 400; omitirlos no impide cambiar estados. Cadena vacía se normaliza a null. emailTecnico se captura al asignar; enviarlo en un reintento del mismo estado no modifica la orden.
+Crear exige emailContacto válido y la transición CREADA → ASIGNADA exige emailTecnico válido, ambos de máximo 254 caracteres. Omitirlos, enviar null, vacío, espacios, formato inválido o longitud excesiva devuelve 400 en esas operaciones. La asignación valida el correo antes del descuento de stock. Un reintento del mismo estado no modifica la orden ni vuelve a exigir el correo. Las órdenes antiguas siguen consultables y PUT de datos generales no exige correo.
 
 Para órdenes antiguas, incluso cerradas:
 
@@ -60,7 +60,7 @@ Content-Type: application/json
 {"emailContacto":"cliente@example.org","emailTecnico":"tecnico@example.org"}
 ```
 
-El actor de este endpoint procede del claim **oid del JWT**, no de un query parameter. Sin autenticación responde 401; sin oid, 403. El propietario puede modificar únicamente emailContacto. Operador/Admin puede modificar ambos contactos de órdenes gestionadas. Un cliente ajeno recibe 404; un propietario que intenta modificar emailTecnico recibe 403. null/propiedad omitida conserva el valor y `""` lo elimina. No cambia estado, repuestos, fecha de creación, fecha de transición ni usuario de la última transición.
+El actor de este endpoint procede del claim **oid del JWT**, no de un query parameter. Sin autenticación responde 401; sin oid, 403. El propietario puede modificar únicamente emailContacto. Operador/Admin puede modificar ambos contactos de órdenes gestionadas. Un cliente ajeno recibe 404; un propietario que intenta modificar emailTecnico recibe 403. Una propiedad omitida conserva el valor, incluso si es null en una orden antigua. Un null explícito se rechaza. emailContacto no puede vaciarse; emailTecnico solo puede vaciarse si la orden no tiene técnico asignado. No cambia estado, repuestos, fecha de creación, fecha de transición ni usuario de la última transición.
 
 Las rutas anteriores mantienen su modelo de confianza con el BFF y el JWT. No se han alterado BFF, Entra ni API Gateway. Para Paso 6, BFF debe trasladar estos campos, conservarlos en sus DTO de respuesta y añadir un proxy autorizado para contactos, reenviando el JWT; Frontend deberá capturar correo del cliente y del técnico sin sustituir sus identificadores de autenticación.
 

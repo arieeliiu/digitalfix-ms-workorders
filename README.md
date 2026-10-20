@@ -13,7 +13,11 @@ Documentación de esta entrega:
 - [Resultados y matriz de evidencias](docs/EVIDENCIAS.md).
 - [Migración aditiva de contactos para Oracle](docs/oracle-contactos.sql).
 
-Se incorporan `emailContacto` opcional al crear, `emailTecnico` opcional al asignar y `PATCH /api/workorders/{id}/contactos` para actualizar contactos autorizadamente, sin alterar estados, fechas de transición ni stock. Las respuestas incorporan ambos campos, que pueden ser null. BFF/Frontend y Compose central requieren la adaptación documentada para el Paso 6; no fueron modificados aquí.
+Se exige `emailContacto` válido al crear y `emailTecnico` válido al asignar, de máximo 254 caracteres. `PATCH /api/workorders/{id}/contactos` actualiza contactos autorizadamente, sin alterar estados, fechas de transición ni stock. Las respuestas incorporan ambos campos, que pueden ser null en órdenes antiguas.
+
+Validación de correos obligatorios: `./mvnw.cmd -B verify`, 44 pruebas aprobadas,
+2 pruebas opcionales de RabbitMQ real omitidas y compilación correcta. Se usaron
+H2 y dobles locales; no se modificaron datos ni restricciones de Oracle.
 
 Las comprobaciones nuevas de transacciones se realizaron con H2 y las de publicación con RabbitMQ real aislado. La validación específica de esta versión contra Oracle real y el flujo completo desplegado sigue pendiente; las referencias posteriores al despliegue describen la base de la Evaluación 1.
 
@@ -159,8 +163,9 @@ autorizar. Admin puede operar sobre órdenes ajenas; Cliente y Operador solo sob
 las propias. El propietario no cambia y la auditoría registra al actor real.
 Las restricciones de estado se aplican a todos, incluido Admin.
 
-La edición de correo reutiliza PATCH `/contactos`, independiente de PUT: omisión/null
-conserva el contacto y cadena vacía lo elimina. No publica notificaciones ni modifica
+La edición de correo reutiliza PATCH `/contactos`, independiente de PUT: omitir
+conserva el contacto; un null explícito se rechaza. No se permite vaciar el correo
+del cliente ni el del técnico asignado. PUT no exige correo. PATCH no publica notificaciones ni modifica
 estado, stock o fecha de transición. El frontend informa guardado parcial si PUT
 termina y PATCH falla; no se promete atomicidad entre ambas llamadas.
 

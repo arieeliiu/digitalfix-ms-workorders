@@ -32,9 +32,11 @@ public class OrdenService {
     private final OrdenRepository repositorio;
     private final CatalogoClient catalogCliente;
     private final NotificacionesOrden notificaciones;
+    private final jakarta.validation.Validator validador;
 
     @Transactional
     public OrdenResponse crearOrden(NuevaOrdenRequest solicitud) {
+        exigirCorreo(solicitud.emailContacto());
         var orden = new OrdenTrabajo(
                 solicitud.servicioId(),
                 solicitud.descripcion().trim(),
@@ -126,6 +128,7 @@ public class OrdenService {
 
         if (siguiente == EstadoOrden.ASIGNADA) {
 
+            exigirCorreo(datos.emailTecnico());
             orden.actualizarContactos(null, datos.emailTecnico());
 
             if (datos.tecnicoId() != null) {
@@ -199,6 +202,9 @@ public class OrdenService {
         var orden = ordenParaGestionar(id, actorId, gestor);
         if (!gestor && datos.emailTecnico() != null)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El correo del técnico requiere gestión de órdenes");
+        if (datos.emailContacto() != null) exigirCorreo(datos.emailContacto());
+        if (datos.emailTecnico() != null && (orden.getTecnicoId() != null || !datos.emailTecnico().isEmpty()))
+            exigirCorreo(datos.emailTecnico());
         orden.actualizarContactos(datos.emailContacto(), datos.emailTecnico());
         return respuesta(repositorio.save(orden));
     }
@@ -221,6 +227,11 @@ public class OrdenService {
         }
 
         repositorio.delete(orden);
+    }
+
+    private void exigirCorreo(String correo) {
+        if (!validador.validateValue(NuevaOrdenRequest.class, "emailContacto", correo).isEmpty())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Se requiere un correo válido de hasta 254 caracteres");
     }
 
     private OrdenTrabajo ordenParaGestionar(

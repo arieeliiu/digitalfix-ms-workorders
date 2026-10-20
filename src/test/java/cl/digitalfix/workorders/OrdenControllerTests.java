@@ -66,7 +66,8 @@ class OrdenControllerTests {
                       "servicioId": 1,
                       "descripcion": " Enchufe sin suministro ",
                       "direccion": " Calle 123 ",
-                      "solicitanteId": "usuario-prueba"
+                      "solicitanteId": "usuario-prueba",
+                      "emailContacto": "cliente@example.org"
                     }
                     """))
             .andExpect(status().isCreated())
@@ -122,7 +123,8 @@ class OrdenControllerTests {
               "servicioId": 1,
               "descripcion": "Problema",
               "direccion": "Calle",
-              "solicitanteId": "usuario"
+              "solicitanteId": "usuario",
+              "emailContacto": "cliente@example.org"
             }
             """;
 

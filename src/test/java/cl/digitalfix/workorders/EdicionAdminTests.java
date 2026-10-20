@@ -101,16 +101,81 @@ class EdicionAdminTests {
         mvc.perform(put("/api/workorders/{id}", id).principal(auth).contentType("application/json").content(DATOS)).andExpect(status().isOk());
         assertEquals("cliente@example.org", servicio.consultarOrden(id).emailContacto());
         var antes = servicio.consultarOrden(id);
-        for (String correo : List.of("nuevo@example.org", "", "null")) {
-            String valor = correo.equals("null") ? "null" : "\"" + correo + "\"";
+        for (String correo : List.of("nuevo@example.org", "otro@example.org")) {
+            String valor = "\"" + correo + "\"";
             mvc.perform(patch("/api/workorders/{id}/contactos", id).principal(auth).contentType("application/json")
                     .content("{\"emailContacto\":" + valor + "}")).andExpect(status().isOk());
             var actual = servicio.consultarOrden(id);
-            assertEquals(correo.equals("nuevo@example.org") ? correo : null, actual.emailContacto());
+            assertEquals(correo, actual.emailContacto());
             assertEquals(antes.estado(), actual.estado());
             assertEquals(antes.fechaActualizacion(), actual.fechaActualizacion());
             assertEquals(antes.repuestos(), actual.repuestos());
         }
+        verifyNoInteractions(publicador, catalog);
+    }
+
+    @Test void creacionYAsignacionExigenCorreoAntesDeCualquierEfecto() throws Exception {
+        long id = orden("CREADA");
+        long cantidad = repositorio.count();
+        for (String valor : List.of("omitido", "null", "\"\"", "\"   \"", "\"invalido\"", "\"a@\"", "\"" + "x".repeat(250) + "@example.org\"")) {
+            String contacto = valor.equals("omitido") ? "" : ",\"emailContacto\":" + valor;
+            mvc.perform(post("/api/workorders").contentType("application/json")
+                    .content("{\"servicioId\":1,\"descripcion\":\"R\",\"direccion\":\"C\",\"solicitanteId\":\"propietario\"" + contacto + "}"))
+                    .andExpect(status().isBadRequest());
+            String tecnico = valor.equals("omitido") ? "" : ",\"emailTecnico\":" + valor;
+            mvc.perform(put("/api/workorders/{id}/status", id).principal(token("Admin", "admin")).param("solicitanteId", "admin")
+                    .contentType("application/json").content("{\"status\":\"ASIGNADA\",\"tecnicoId\":\"tecnico\",\"repuestos\":[{\"repuestoId\":1,\"cantidad\":1}]" + tecnico + "}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals(cantidad, repositorio.count());
+        assertEquals("CREADA", servicio.consultarOrden(id).estado());
+        assertTrue(servicio.consultarOrden(id).repuestos().isEmpty());
+        verifyNoInteractions(publicador, catalog);
+    }
+
+    @Test void antiguaSinContactosAdmiteConsultaPutYCorreccionSinNotificar() throws Exception {
+        long id = orden("CREADA");
+        new TransactionTemplate(transacciones).executeWithoutResult(tx -> repositorio.findById(id).orElseThrow().actualizarContactos("", null));
+        var auth = token("Cliente", "propietario");
+        mvc.perform(get("/api/workorders/{id}", id)).andExpect(status().isOk()).andExpect(jsonPath("$.emailContacto").isEmpty());
+        mvc.perform(put("/api/workorders/{id}", id).principal(auth).contentType("application/json").content(DATOS)).andExpect(status().isOk());
+        assertNull(servicio.consultarOrden(id).emailContacto());
+        mvc.perform(patch("/api/workorders/{id}/contactos", id).principal(auth).contentType("application/json").content("{}"))
+                .andExpect(status().isOk());
+        assertNull(servicio.consultarOrden(id).emailContacto());
+        mvc.perform(patch("/api/workorders/{id}/contactos", id).principal(auth).contentType("application/json")
+                .content("{\"emailContacto\":\"completado@example.org\"}")).andExpect(status().isOk());
+        assertEquals("completado@example.org", servicio.consultarOrden(id).emailContacto());
+        verifyNoInteractions(publicador, catalog);
+    }
+
+    @Test void patchDistingueOmisionDeBorradoYConservaTecnicoAsignado() throws Exception {
+        long id = orden("ASIGNADA");
+        new TransactionTemplate(transacciones).executeWithoutResult(tx -> {
+            var entidad = repositorio.findById(id).orElseThrow();
+            entidad.cambiarEstado(EstadoOrden.ASIGNADA, "tecnico", "admin");
+            entidad.actualizarContactos(null, "tecnico@example.org");
+        });
+        var auth = token("Admin", "admin");
+        var antes = servicio.consultarOrden(id);
+        for (String campo : List.of("emailContacto", "emailTecnico")) {
+            for (String valor : List.of("null", "\"\"", "\"   \"", "\"invalido\"")) {
+                mvc.perform(patch("/api/workorders/{id}/contactos", id).principal(auth).contentType("application/json")
+                        .content("{\"" + campo + "\":" + valor + "}")).andExpect(status().isBadRequest());
+                assertEquals(antes, servicio.consultarOrden(id));
+            }
+        }
+        mvc.perform(patch("/api/workorders/{id}/contactos", id).principal(auth).contentType("application/json")
+                .content("{\"emailContacto\":\"nuevo@example.org\"}")).andExpect(status().isOk());
+        assertEquals(antes.emailTecnico(), servicio.consultarOrden(id).emailTecnico());
+        mvc.perform(patch("/api/workorders/{id}/contactos", id).principal(auth).contentType("application/json")
+                .content("{\"emailTecnico\":\"otro@example.org\"}")).andExpect(status().isOk());
+        assertEquals("nuevo@example.org", servicio.consultarOrden(id).emailContacto());
+        assertEquals(antes.estado(), servicio.consultarOrden(id).estado());
+        assertEquals(antes.fechaActualizacion(), servicio.consultarOrden(id).fechaActualizacion());
+        // La orden ya está asignada: el reintento sin correo no descuenta ni publica.
+        mvc.perform(put("/api/workorders/{id}/status", id).principal(auth).param("solicitanteId", "admin")
+                .contentType("application/json").content("{\"status\":\"ASIGNADA\"}")).andExpect(status().isOk());
         verifyNoInteractions(publicador, catalog);
     }
 }

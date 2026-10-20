@@ -23,7 +23,7 @@ public record NuevaOrdenRequest(
     @NotBlank(message = "El solicitante es obligatorio")
     @Size(max = 100, message = "El solicitante admite hasta 100 caracteres")
     String solicitanteId,
-    @Email @Size(max = 254)
+    @NotBlank @Email @Size(max = 254)
     String emailContacto
 ) {
     public NuevaOrdenRequest(Long servicioId, String descripcion, String direccion, String solicitanteId) {
