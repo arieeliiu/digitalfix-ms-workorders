@@ -70,7 +70,8 @@ public class OrdenController {
         return servicio.actualizarOrden(
                 id,
                 solicitud,
-                actorAutenticado(autenticacion), esAdmin(autenticacion));
+                actorAutenticado(autenticacion), esAdmin(autenticacion),
+                puedeGestionarOrdenes(autenticacion));
     }
 
     @PutMapping("/{id}/status")
