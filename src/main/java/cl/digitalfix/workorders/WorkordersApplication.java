@@ -4,10 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DigitalfixMsWorkordersApplication {
+public class WorkordersApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(DigitalfixMsWorkordersApplication.class, args);
+		SpringApplication.run(WorkordersApplication.class, args);
 	}
 
 }
