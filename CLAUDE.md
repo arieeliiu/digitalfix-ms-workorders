@@ -16,6 +16,7 @@ Clase principal: `WorkordersApplication` (renombrada desde `DigitalfixMsWorkorde
 | `entity/EstadoOrden` | `permite(siguiente)`: única fuente de verdad de las transiciones |
 | `entity/OrdenTrabajo`, `RepuestoOrden` | Entidad con `@Getter` y métodos de dominio (`cambiarEstado`, `actualizarRepuestos`, `actualizarContactos`). Sin setters |
 | `repository/OrdenRepository` | `findByIdParaModificar` con `PESSIMISTIC_WRITE`: úsalo en toda mutación |
+| `service/HistorialOrdenService`, `entity/HistorialOrden`, `AccionHistorial` | Auditoría en `historial_ordenes`: `CREACION`, `CAMBIO_ESTADO` y `ELIMINACION`. Registros inmutables, sin FK a la orden. `GET /{id}/historial` (Admin y Auditor) |
 | `client/CatalogoClient` | `descontarStock`, `ajustarStock` y `nombreServicio`. Traduce errores de Catalog a 404, 409 o 503 |
 | `messaging/` | `NotificacionesOrden` (arma comandos y publica en `afterCommit`), `PublicadorRabbit` (confirms y mandatory), `ContratosMensajeria` (records del contrato) |
 | `config/` | `RabbitPublisherConfig` (`mandatory=true`) y `client/RestClientConfig` (RestClient con qualifier `catalogRestClient`) |
@@ -36,6 +37,16 @@ Clase principal: `WorkordersApplication` (renombrada desde `DigitalfixMsWorkorde
 - Editar datos generales: CREADA por el dueño (o Admin) y estados activos solo un gestor. Eliminar: solo CREADA o CANCELADA.
 - `emailContacto` es obligatorio al crear (validado con `exigirCorreo`). Máximo 254 caracteres.
 - Un rollback de Workorders **no** revierte un descuento ya hecho en Catalog: es una limitación conocida, no una transacción distribuida.
+
+## Historial de auditoría (no romper)
+
+- Se escribe en la **misma transacción** que el cambio (`Propagation.MANDATORY` en `HistorialOrdenService`): llamarlo fuera de una transacción falla a propósito.
+- Solo transiciones reales: el reintento del mismo estado y las transiciones rechazadas no registran nada. Toda mutación nueva que deba auditarse se registra **después** de sus validaciones.
+- El actor del historial es el `oid` del JWT (`ActorAuditoria`), no el query param `solicitanteId`; el param se sigue usando solo para la autorización heredada.
+- Sin FK a `ordenes_trabajo`: el historial sobrevive a la eliminación. Nunca lo borres en cascada ni lo actualices.
+- No guarda correos ni descripciones. Ediciones de datos, repuestos y contactos **no** se registran todavía.
+- Pendiente: proxy en el BFF y rol `Auditor` en Entra y frontend. A futuro, publicar estos mismos registros a Kafka (`workorders.events`) para `ms-audit`.
+- Migración manual: `docs/oracle-historial.sql`. Tests en `HistorialOrdenTests`.
 
 ## Mensajería (leer `docs/MENSAJERIA.md` antes de tocarla)
 

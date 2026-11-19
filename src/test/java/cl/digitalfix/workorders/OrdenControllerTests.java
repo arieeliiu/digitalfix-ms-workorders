@@ -45,6 +45,10 @@ class OrdenControllerTests {
     @MockitoBean
     private cl.digitalfix.workorders.messaging.NotificacionesOrden notificaciones;
 
+    // OrdenService depende del historial; aquí no se verifica (ver HistorialOrdenTests).
+    @MockitoBean
+    private cl.digitalfix.workorders.service.HistorialOrdenService historial;
+
     @Test
     void filtraOrdenesPorSolicitanteEnRepositorio() throws Exception {
         when(repositorio.findBySolicitanteId("usuario-prueba")).thenReturn(List.of(ordenEjemplo()));

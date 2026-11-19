@@ -99,6 +99,7 @@ El servicio utiliza:
 | PUT | `/api/workorders/{id}` | Actualiza una orden |
 | PUT | `/api/workorders/{id}/status` | Cambia el estado |
 | DELETE | `/api/workorders/{id}` | Elimina una orden cuando corresponde |
+| GET | `/api/workorders/{id}/historial` | Historial de auditoría de la orden (Admin y Auditor) |
 
 ## Creación de órdenes
 
@@ -468,6 +469,40 @@ Si la orden está en otro estado, se responde:
 ```text
 409 Conflict
 ```
+
+## Historial de auditoría
+
+Cada acción relevante sobre una orden queda registrada en la tabla `historial_ordenes`, en la **misma transacción** que el cambio: si la orden se confirma, su registro también; si hay rollback, no queda ninguno de los dos.
+
+| Acción | Cuándo | Estado anterior → nuevo |
+|---|---|---|
+| `CREACION` | Al crear la orden | `null` → `CREADA` |
+| `CAMBIO_ESTADO` | En cada transición real | estado previo → estado nuevo |
+| `ELIMINACION` | Al eliminar la orden | estado final → `null` |
+
+- Un reintento del mismo estado y una transición rechazada (409) **no** generan registro.
+- El actor es el claim `oid` del JWT y se guardan sus roles de la aplicación (`Admin`, `Operador`, `Cliente`, `Auditor`). No se toma del query param `solicitanteId`.
+- No hay FK hacia `ordenes_trabajo`: el historial sigue disponible después de eliminar la orden.
+- No guarda correos ni descripciones (datos personales); solo identificadores, estados y técnico.
+
+Consulta (solo lectura, roles `Admin` o `Auditor`):
+
+```http
+GET /api/workorders/{id}/historial
+```
+
+```json
+[
+  { "id": 1, "ordenId": 7, "accion": "CREACION", "estadoAnterior": null, "estadoNuevo": "CREADA",
+    "tecnicoId": null, "actorId": "<oid>", "actorRoles": "Cliente", "fecha": "2026-11-18T22:10:00Z" },
+  { "id": 2, "ordenId": 7, "accion": "CAMBIO_ESTADO", "estadoAnterior": "CREADA", "estadoNuevo": "ASIGNADA",
+    "tecnicoId": "tecnico-1", "actorId": "<oid>", "actorRoles": "Operador", "fecha": "2026-11-18T22:15:00Z" }
+]
+```
+
+Respuestas: `401` sin token, `403` sin rol `Admin` ni `Auditor`, `404` si la orden no existe y nunca tuvo historial. Las órdenes creadas antes de esta funcionalidad devuelven solo los registros posteriores (o una lista vacía).
+
+`ddl-auto=update` crea la tabla al arrancar. Para crearla a mano en Oracle: `docs/oracle-historial.sql` (idempotente).
 
 ## Persistencia
 
