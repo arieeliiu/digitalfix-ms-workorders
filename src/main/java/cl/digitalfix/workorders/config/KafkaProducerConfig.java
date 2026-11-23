@@ -26,12 +26,8 @@ public class KafkaProducerConfig {
         config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         // Confirman el leader y todos los ISR
         config.put(ProducerConfig.ACKS_CONFIG, "all");
-        // Si Kafka está caído, send() esperaría 60 s por defecto y dejaría colgada la respuesta HTTP.
-        // Se acota todo al mismo timeout que espera PublicadorKafka.
-        int ms = (int) timeout.toMillis();
-        config.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, ms);
-        config.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, ms);
-        config.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, ms);
+        // Si Kafka esta caido, send() esperaría 60 s por defecto y dejaría colgada la respuesta HTTP.
+        config.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, (int) timeout.toMillis());
         return new DefaultKafkaProducerFactory<>(config);
     }
 

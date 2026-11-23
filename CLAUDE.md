@@ -19,7 +19,8 @@ Clase principal: `WorkordersApplication` (renombrada desde `DigitalfixMsWorkorde
 | `service/HistorialOrdenService`, `entity/HistorialOrden`, `AccionHistorial` | Auditoría en `historial_ordenes`: `CREACION`, `CAMBIO_ESTADO` y `ELIMINACION`. Registros inmutables, sin FK a la orden. `GET /{id}/historial` (Admin y Auditor) |
 | `client/CatalogoClient` | `descontarStock`, `ajustarStock` y `nombreServicio`. Traduce errores de Catalog a 404, 409 o 503 |
 | `messaging/` | `NotificacionesOrden` (arma comandos y publica en `afterCommit`), `PublicadorRabbit` (confirms y mandatory), `ContratosMensajeria` (records del contrato) |
-| `config/` | `RabbitPublisherConfig` (`mandatory=true`) y `client/RestClientConfig` (RestClient con qualifier `catalogRestClient`) |
+| `messaging/kafka/` | `EventoOrden` (qué: payload del evento), `CoordinadorEventosOrden` (cuándo: `afterCommit` y log de fallos), `PublicadorKafka` (cómo: `send` a `workorders.events` con key = ordenId) |
+| `config/` | `RabbitPublisherConfig` (`mandatory=true`), `KafkaProducerConfig` (`acks=all`, `max.block.ms` acotado) y `client/RestClientConfig` (RestClient con qualifier `catalogRestClient`) |
 
 ## Seguridad y modelo de confianza
 
@@ -45,7 +46,8 @@ Clase principal: `WorkordersApplication` (renombrada desde `DigitalfixMsWorkorde
 - El actor del historial es el `oid` del JWT (`ActorAuditoria`), no el query param `solicitanteId`; el param se sigue usando solo para la autorización heredada.
 - Sin FK a `ordenes_trabajo`: el historial sobrevive a la eliminación. Nunca lo borres en cascada ni lo actualices.
 - No guarda correos ni descripciones. Ediciones de datos, repuestos y contactos **no** se registran todavía.
-- Pendiente: proxy en el BFF y rol `Auditor` en Entra y frontend. A futuro, publicar estos mismos registros a Kafka (`workorders.events`) para `ms-audit`.
+- **Cada registro del historial produce un evento Kafka** (`HistorialOrdenService.registrar`): lo que queda en la tabla es lo que se publica. Un nuevo tipo de registro exige su tipo en `EventoOrden.tipo()`.
+- Pendiente: proxy en el BFF y rol `Auditor` en Entra y frontend.
 - Migración manual: `docs/oracle-historial.sql`. Tests en `HistorialOrdenTests`.
 
 ## Mensajería (leer `docs/MENSAJERIA.md` antes de tocarla)
@@ -56,16 +58,26 @@ Clase principal: `WorkordersApplication` (renombrada desde `DigitalfixMsWorkorde
 - `spring.rabbitmq.dynamic=false`: Workorders no declara exchanges ni colas. El usuario `digitalfix_workorders` solo tiene Write sobre `cmd.direct` y `cmd.topic`.
 - Cambiar un payload exige cambiar también `dto/Contrato` en Notify o Report y `docs/contratos.json`. **Report rechaza propiedades desconocidas** (`FAIL_ON_UNKNOWN_PROPERTIES`): agregar un campo a `Informe` sin actualizar Report primero manda los mensajes a la DLQ.
 - `digitalfix.rabbit.enabled=false` por defecto. En la evaluación 2 se activa con `DIGITALFIX_RABBIT_ENABLED=true`.
-- Próximo paso según el caso: publicar eventos a Kafka (`workorders.events`). Hazlo como adaptador nuevo (`messaging/kafka`) detrás de una interfaz, sin mezclarlo con `PublicadorRabbit`, y evalúa un Outbox.
+
+### Eventos Kafka (`messaging/kafka`, detalle en `docs/MENSAJERIA.md`)
+
+- Workorders publica **eventos** (hechos en pasado) a `workorders.events`, además de los comandos de Rabbit. Rabbit y Kafka no se mezclan.
+- Tipos: `ORDEN_CREADA`, `ORDEN_ESTADO_CAMBIADO` y `ORDEN_ELIMINADA`, con el mismo `Sobre` de Rabbit y `EventoOrden` como payload (sin correos ni descripciones).
+- Key = `ordenId`: todos los eventos de una orden van a la misma partición y se leen en orden. Header `correlationId` = ordenId.
+- Solo después del commit: un rollback no publica. Un fallo de Kafka se loguea (`evento resultado=fallido`) y **nunca** se propaga ni revierte la orden; ese evento se pierde (sin Outbox).
+- `digitalfix.kafka.enabled=false` por defecto. Probado contra el clúster local de `digitalfix-infra/kafka` (23/11/2026).
+- `max.block.ms` = `KAFKA_TIMEOUT` evita que la respuesta HTTP espere 60 s con Kafka caído. No fijar `request.timeout.ms`/`delivery.timeout.ms` sin respetar `delivery >= linger + request` (el productor no se construye).
+- Cambiar `EventoOrden` exige coordinar con los consumidores (`ms-audit`, `ms-report`).
 
 ## Variables de entorno
 
 **Credenciales locales:** `src/main/resources/application.properties` tiene, sin commitear, el endpoint, el usuario y la contraseña de la RDS como valores por defecto de `${DB_URL:...}`, `${DB_USERNAME:...}` y `${DB_PASSWORD:...}`. No los commitees (`git add -p` y omite esas líneas), no los copies a otros archivos y no muestres la contraseña. En Docker los reemplaza `digitalfix-infra/apps/.env`.
 
 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `CATALOG_URL` (por defecto `http://localhost:8081`; en Docker lo define el Compose), `DIGITALFIX_RABBIT_ENABLED`,
-`RABBITMQ_ADDRESSES`, `RABBITMQ_VHOST`, `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD` y `RABBITMQ_CONFIRM_TIMEOUT` (1 ms a 30 s). Ver `.env.example`.
+`RABBITMQ_ADDRESSES`, `RABBITMQ_VHOST`, `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD` y `RABBITMQ_CONFIRM_TIMEOUT` (1 ms a 30 s),
+`DIGITALFIX_KAFKA_ENABLED`, `KAFKA_BOOTSTRAP_SERVERS` (por defecto `localhost:9092,localhost:9093,localhost:9094`) y `KAFKA_TIMEOUT` (5 s, 1 ms a 30 s). Ver `.env.example`.
 
-Al correrlo local contra la RDS no hace falta ninguna variable. Con `DIGITALFIX_RABBIT_ENABLED` sin definir no publica comandos, y eso es lo esperado en local.
+Al correrlo local contra la RDS no hace falta ninguna variable. Con `DIGITALFIX_RABBIT_ENABLED` o `DIGITALFIX_KAFKA_ENABLED` sin definir no publica, y eso es lo esperado en local. Para probar Kafka: levantar `digitalfix-infra/kafka` y definir `DIGITALFIX_KAFKA_ENABLED=true` en IntelliJ; los eventos se ven en Kafka UI (`localhost:8090`).
 
 ## Tests
 
@@ -75,6 +87,6 @@ docker build --target pruebas -t digitalfix-workorders:pruebas .
 python scripts/verificar_rabbit.py                    # Rabbit real: vhost y usuario temporales, se borran al final
 ```
 
-- Suites: `OrdenServiceTests`, `OrdenControllerTests`, `EdicionAdminTests`, `MensajeriaTransaccionesTests`, `PublicadorRabbitTests`, `CatalogoNombreTests`, `PersistenciaReinicioTests` y `RabbitRealTests` (se salta sin broker).
-- Toda regla nueva de estado o permiso necesita su test en `OrdenServiceTests` o `EdicionAdminTests`. Todo cambio de mensajería, en `MensajeriaTransaccionesTests` (rollback = sin publicación).
+- Suites: `OrdenServiceTests`, `OrdenControllerTests`, `EdicionAdminTests`, `MensajeriaTransaccionesTests`, `PublicadorRabbitTests`, `CatalogoNombreTests`, `PersistenciaReinicioTests`, `RabbitRealTests` (se salta sin broker), `PublicadorKafkaTests`, `CoordinadorEventosOrdenTests` y `EventosKafkaTransaccionesTests` (flujo real con H2; incluye construir el productor real para validar su configuración).
+- Toda regla nueva de estado o permiso necesita su test en `OrdenServiceTests` o `EdicionAdminTests`. Todo cambio de mensajería, en `MensajeriaTransaccionesTests` (Rabbit) o `EventosKafkaTransaccionesTests` (Kafka): rollback = sin publicación.
 - Migraciones de esquema: SQL en `docs/` (ver `oracle-contactos.sql`). Nunca ejecutarlas contra Oracle real sin confirmación.
