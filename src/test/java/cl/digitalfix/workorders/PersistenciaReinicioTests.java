@@ -35,7 +35,7 @@ class PersistenciaReinicioTests {
     }
 
     private ConfigurableApplicationContext iniciar() {
-        return new SpringApplicationBuilder(DigitalfixMsWorkordersApplication.class)
+        return new SpringApplicationBuilder(WorkordersApplication.class)
             .web(WebApplicationType.NONE).run(
                 "--spring.datasource.url=jdbc:h2:file:" + temporal.resolve("ordenes").toString().replace('\\', '/') + ";MODE=Oracle",
                 "--spring.jpa.hibernate.ddl-auto=update");

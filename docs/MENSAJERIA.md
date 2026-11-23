@@ -108,3 +108,38 @@ python scripts/verificar_rabbit.py
 La prueba real usa el clúster del Paso 1 pero crea un vhost/usuario únicos, exchanges direct/topic y una cola colectora. El productor solo tiene Write sobre los exchanges. Un observador exclusivo de pruebas verifica los cinco comandos, persistencia y ausencia de duplicados. Se prueba además un retorno real sin ruta. Al terminar se eliminan exclusivamente el vhost y usuario temporales.
 
 El script lee credenciales de Infra en memoria, pasa un archivo de entorno local ignorado al contenedor y lo elimina al terminar. No imprime secretos ni consume colas funcionales. Catalog se simula en esa prueba; Oracle se sustituye por H2. La consulta HTTP de nombre se prueba por separado con servidor local y reenvío de Bearer. Los JWT de las pruebas HTTP representan autenticación simulada, no validación real con Entra.
+
+## Eventos Kafka (workorders.events)
+
+Además de los comandos RabbitMQ, Workorders publica **eventos**: hechos ya ocurridos que leen varios consumidores (ms-audit y ms-report, cada uno con su `group.id`). El clúster y los tópicos están en `digitalfix-infra/kafka`.
+
+| Elemento | Valor |
+|---|---|
+| Tópico | `workorders.events` (3 particiones, RF 3, `delete`, 7 días) |
+| Key | `ordenId` como texto: todos los eventos de una orden van a la misma partición y se leen en orden |
+| Value | `Sobre` en JSON (mismo formato que RabbitMQ), `StringSerializer` |
+| Header | `correlationId` = `ordenId` |
+| Confirmación | `acks=all`; idempotencia del productor activa por defecto |
+
+**Cuándo se publica:** cada registro de `historial_ordenes` produce un evento, en `afterCommit` de la misma transacción (`HistorialOrdenService.registrar` → `CoordinadorEventosOrden` → `PublicadorKafka`). Un rollback no publica. Repetir el estado actual o una transición rechazada no registra historial y, por lo tanto, no publica.
+
+| `type` | Cuándo | `estadoAnterior` → `estadoNuevo` |
+|---|---|---|
+| `ORDEN_CREADA` | Al crear | `null` → `CREADA` |
+| `ORDEN_ESTADO_CAMBIADO` | Cada transición real | anterior → nuevo |
+| `ORDEN_ELIMINADA` | Al eliminar (CREADA o CANCELADA) | estado final → `null` |
+
+**Payload `EventoOrden`:** `ordenId`, `accion` (`CREACION`, `CAMBIO_ESTADO`, `ELIMINACION`), `estadoAnterior`, `estadoNuevo`, `tecnicoId`, `actorId` (oid de Entra), `actorRoles` y `fecha`. No incluye correos ni descripciones.
+
+```json
+{"schemaVersion":"1.0","type":"ORDEN_ESTADO_CAMBIADO","eventId":"bc8d4a43-...","timestamp":"2026-11-23T03:42:49.230956900Z",
+ "traceId":"4fb63c3f-...","correlationId":"22",
+ "payload":{"ordenId":22,"accion":"CAMBIO_ESTADO","estadoAnterior":"CREADA","estadoNuevo":"ASIGNADA",
+            "tecnicoId":"tec-003","actorId":"<oid>","actorRoles":"Admin","fecha":"2026-11-23T03:42:49.230956900Z"}}
+```
+
+**Fallos:** si Kafka no confirma en `KAFKA_TIMEOUT` (5 s), se registra `evento resultado=fallido ... motivo=...` y la orden sigue confirmada; el evento se pierde (no hay Outbox). `kafka_timeout_resultado_incierto` significa que el broker pudo haberlo recibido.
+
+**Para los consumidores:** la entrega es *at-least-once*: deduplicar por `eventId` (tabla de mensajes procesados). Cada consumidor publica sus fallos definitivos en su propio DLT (`workorders.events.audit.DLT`, `workorders.events.report.DLT`). Cambiar `EventoOrden` exige actualizar antes a los consumidores.
+
+**Configuración:** `DIGITALFIX_KAFKA_ENABLED` (false por defecto), `KAFKA_BOOTSTRAP_SERVERS` (local: `localhost:9092,localhost:9093,localhost:9094`) y `KAFKA_TIMEOUT`. Verificado el 23/11/2026 contra el clúster local: la orden 22 publicó `ORDEN_CREADA` y `ORDEN_ESTADO_CAMBIADO` en la partición 0, offsets 0 y 1.

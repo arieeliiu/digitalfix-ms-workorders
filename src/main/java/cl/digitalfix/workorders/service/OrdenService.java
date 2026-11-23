@@ -18,6 +18,7 @@ import java.util.TreeMap;
 import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
 import cl.digitalfix.workorders.dto.request.ContactosRequest;
 import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
+import cl.digitalfix.workorders.dto.response.HistorialOrdenResponse;
 import cl.digitalfix.workorders.dto.response.OrdenResponse;
 import cl.digitalfix.workorders.entity.EstadoOrden;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
@@ -37,9 +38,16 @@ public class OrdenService {
     private final CatalogoClient catalogCliente;
     private final NotificacionesOrden notificaciones;
     private final jakarta.validation.Validator validador;
+    private final HistorialOrdenService historial;
 
+    // Mantiene la firma anterior para llamadas internas y pruebas existentes.
     @Transactional
     public OrdenResponse crearOrden(NuevaOrdenRequest solicitud) {
+        return crearOrden(solicitud, null);
+    }
+
+    @Transactional
+    public OrdenResponse crearOrden(NuevaOrdenRequest solicitud, String actorRoles) {
         exigirCorreo(solicitud.emailContacto());
         var orden = new OrdenTrabajo(
                 solicitud.servicioId(),
@@ -49,7 +57,16 @@ public class OrdenService {
         );
 
         orden.actualizarContactos(solicitud.emailContacto(), null);
-        return respuesta(repositorio.save(orden));
+        var guardada = repositorio.save(orden);
+        historial.registrarCreacion(guardada.getId(), guardada.getSolicitanteId(), actorRoles);
+        return respuesta(guardada);
+    }
+
+    // Trazabilidad para auditoría. Sigue disponible después de eliminar la orden.
+    public List<HistorialOrdenResponse> consultarHistorial(Long id) {
+        if (!repositorio.existsById(id) && !historial.tieneRegistros(id))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No existe una orden con id " + id);
+        return historial.consultar(id);
     }
 
     public OrdenResponse consultarOrden(Long id) {
@@ -110,12 +127,24 @@ public class OrdenService {
         return respuesta(repositorio.save(orden));
     }
 
+    // Mantiene la firma anterior para llamadas internas y pruebas existentes.
     @Transactional
     public OrdenResponse cambiarEstado(
             Long id,
             CambioEstadoRequest datos,
             String actorId,
             boolean puedeGestionarOrdenes) {
+        return cambiarEstado(id, datos, actorId, puedeGestionarOrdenes,
+                new ActorAuditoria(actorId, null));
+    }
+
+    @Transactional
+    public OrdenResponse cambiarEstado(
+            Long id,
+            CambioEstadoRequest datos,
+            String actorId,
+            boolean puedeGestionarOrdenes,
+            ActorAuditoria auditor) {
 
         var orden = ordenParaGestionar(
                 id,
@@ -205,6 +234,10 @@ public class OrdenService {
                 tecnico,
                 actorId);
 
+        // Solo transiciones reales: un reintento del mismo estado ya retornó arriba.
+        historial.registrarCambioEstado(orden.getId(), actual.name(), siguiente.name(),
+                tecnico, auditor.id(), auditor.roles());
+
         var instantanea = respuesta(repositorio.save(orden));
         notificaciones.despuesDelCommit(instantanea);
         return instantanea;
@@ -266,10 +299,18 @@ public class OrdenService {
         return resultado;
     }
 
+    // Mantiene la firma anterior para llamadas internas y pruebas existentes.
     @Transactional
     public void eliminarOrden(
             Long id,
             String solicitanteId, boolean esAdmin) {
+        eliminarOrden(id, solicitanteId, esAdmin, null);
+    }
+
+    @Transactional
+    public void eliminarOrden(
+            Long id,
+            String solicitanteId, boolean esAdmin, String actorRoles) {
 
         var orden = ordenParaGestionar(
                 id,
@@ -283,6 +324,8 @@ public class OrdenService {
                     "Solo se pueden eliminar órdenes creadas o canceladas");
         }
 
+        historial.registrarEliminacion(orden.getId(), orden.getEstado(),
+                orden.getTecnicoId(), solicitanteId, actorRoles);
         repositorio.delete(orden);
     }
 

@@ -26,7 +26,9 @@ import cl.digitalfix.workorders.dto.request.ActualizarRepuestosRequest;
 import cl.digitalfix.workorders.dto.request.CambioEstadoRequest;
 import cl.digitalfix.workorders.dto.request.ContactosRequest;
 import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
+import cl.digitalfix.workorders.dto.response.HistorialOrdenResponse;
 import cl.digitalfix.workorders.dto.response.OrdenResponse;
+import cl.digitalfix.workorders.service.ActorAuditoria;
 import cl.digitalfix.workorders.service.OrdenService;
 
 @RestController
@@ -34,14 +36,34 @@ import cl.digitalfix.workorders.service.OrdenService;
 @RequiredArgsConstructor
 public class OrdenController {
 
+    // Roles que se registran en el historial, en orden fijo.
+    private static final List<String> ROLES_AUDITABLES = List.of("Admin", "Operador", "Cliente", "Auditor");
+    private static final List<String> ROLES_LECTURA_HISTORIAL = List.of("Admin", "Auditor");
+
     private final OrdenService servicio;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public OrdenResponse crearOrden(
-            @Valid @RequestBody NuevaOrdenRequest solicitud) {
+            @Valid @RequestBody NuevaOrdenRequest solicitud,
+            JwtAuthenticationToken autenticacion) {
 
-        return servicio.crearOrden(solicitud);
+        return servicio.crearOrden(solicitud, rolesAuditoria(autenticacion));
+    }
+
+    // Trazabilidad de la orden (creación, cambios de estado y eliminación).
+    // Solo lectura, para Admin y Auditor.
+    @GetMapping("/{id}/historial")
+    public List<HistorialOrdenResponse> consultarHistorial(
+            @PathVariable Long id,
+            JwtAuthenticationToken autenticacion) {
+
+        if (autenticacion == null || !autenticacion.isAuthenticated())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        var roles = autenticacion.getToken().getClaimAsStringList("roles");
+        if (roles == null || roles.stream().noneMatch(ROLES_LECTURA_HISTORIAL::contains))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        return servicio.consultarHistorial(id);
     }
 
     @GetMapping("/{id}")
@@ -81,11 +103,17 @@ public class OrdenController {
             @RequestParam String solicitanteId,
             JwtAuthenticationToken autenticacion) {
 
+        // El historial toma el actor del JWT (oid), no del query param.
+        var auditor = new ActorAuditoria(
+                oidAuditoria(autenticacion, solicitanteId),
+                rolesAuditoria(autenticacion));
+
         return servicio.cambiarEstado(
                 id,
                 solicitud,
                 solicitanteId,
-                puedeGestionarOrdenes(autenticacion));
+                puedeGestionarOrdenes(autenticacion),
+                auditor);
     }
 
     @DeleteMapping("/{id}")
@@ -96,7 +124,22 @@ public class OrdenController {
 
         servicio.eliminarOrden(
                 id,
-                actorAutenticado(autenticacion), esAdmin(autenticacion));
+                actorAutenticado(autenticacion), esAdmin(autenticacion),
+                rolesAuditoria(autenticacion));
+    }
+
+    private String oidAuditoria(JwtAuthenticationToken autenticacion, String respaldo) {
+        if (autenticacion == null) return respaldo;
+        String oid = autenticacion.getToken().getClaimAsString("oid");
+        return oid == null || oid.isBlank() || oid.length() > 100 ? respaldo : oid;
+    }
+
+    private String rolesAuditoria(JwtAuthenticationToken autenticacion) {
+        if (autenticacion == null) return null;
+        var roles = autenticacion.getToken().getClaimAsStringList("roles");
+        if (roles == null) return null;
+        var conocidos = ROLES_AUDITABLES.stream().filter(roles::contains).toList();
+        return conocidos.isEmpty() ? null : String.join(",", conocidos);
     }
 
     private String actorAutenticado(JwtAuthenticationToken autenticacion) {
