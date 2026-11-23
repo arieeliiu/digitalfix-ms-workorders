@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import cl.digitalfix.workorders.dto.response.HistorialOrdenResponse;
 import cl.digitalfix.workorders.entity.AccionHistorial;
 import cl.digitalfix.workorders.entity.HistorialOrden;
+import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.messaging.kafka.CoordinadorEventosOrden;
 import cl.digitalfix.workorders.messaging.kafka.EventoOrden;
 import cl.digitalfix.workorders.repository.HistorialOrdenRepository;
@@ -18,7 +19,7 @@ import cl.digitalfix.workorders.repository.HistorialOrdenRepository;
 // Trazabilidad de las órdenes para auditoría.
 // Los registros se escriben en la misma transacción que el cambio: si la orden
 // se confirma, su historial también; si hay rollback, no queda ninguno de los dos.
-// Cada registro produce además un evento en Kafka (workorders.events), que sale solo tras el commit.
+// Cada registro produce un evento en su tópico Kafka, solo después del commit.
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -46,6 +47,16 @@ public class HistorialOrdenService {
             String actorId, String actorRoles) {
         registrar(new HistorialOrden(ordenId, AccionHistorial.ELIMINACION,
                 estadoFinal, null, tecnicoId, actorId, actorRoles));
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void registrarEdicion(OrdenTrabajo orden, AccionHistorial accion, ActorAuditoria actor) {
+        if (!List.of(AccionHistorial.EDICION_DATOS, AccionHistorial.EDICION_CONTACTOS,
+                AccionHistorial.EDICION_REPUESTOS).contains(accion))
+            throw new IllegalArgumentException("La acción debe representar una edición");
+        // La edición no es una transición: ambos estados describen el estado actual.
+        registrar(new HistorialOrden(orden.getId(), accion, orden.getEstado(), orden.getEstado(),
+                orden.getTecnicoId(), actor.id(), actor.roles()));
     }
 
     // Historial y evento salen del mismo registro: lo que queda en la tabla es lo que se publica.

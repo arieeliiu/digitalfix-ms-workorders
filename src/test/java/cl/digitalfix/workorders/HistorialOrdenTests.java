@@ -159,6 +159,29 @@ class HistorialOrdenTests {
                 .andExpect(status().is(esperado));
     }
 
+    @Test void faltaOidNoSeSustituyePorElQueryParam() throws Exception {
+        long id = crear();
+        mvc.perform(put("/api/workorders/{id}/status", id)
+                        .principal(token(null, "Admin"))
+                        .param("solicitanteId", "oid-cliente")
+                        .contentType("application/json").content("{\"status\":\"CANCELADA\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals(1, historial.consultar(id).size());
+    }
+
+    @Test void laCreacionRegistraActorJwtAunqueElPropietarioSeaOtro() throws Exception {
+        mvc.perform(post("/api/workorders").principal(token("oid-admin", "Admin"))
+                        .contentType("application/json")
+                        .content("{\"servicioId\":1,\"descripcion\":\"Revisión\",\"direccion\":\"Calle\","
+                                + "\"solicitanteId\":\"oid-cliente\",\"emailContacto\":\"cliente@example.org\"}"))
+                .andExpect(status().isCreated())
+                .andDo(resultado -> {
+                    long id = tools.jackson.databind.json.JsonMapper.builder().build()
+                            .readTree(resultado.getResponse().getContentAsString()).get("id").asLong();
+                    assertEquals("oid-admin", historial.consultar(id).getFirst().actorId());
+                });
+    }
+
     @Test void sinTokenResponde401YOrdenInexistente404() throws Exception {
         long id = crear();
         mvc.perform(get("/api/workorders/{id}/historial", id)).andExpect(status().isUnauthorized());

@@ -19,7 +19,8 @@ BEGIN
                 actor_roles     VARCHAR2(100 CHAR),
                 fecha           TIMESTAMP(6)       NOT NULL,
                 CONSTRAINT ck_historial_ordenes_accion
-                    CHECK (accion IN (''CREACION'', ''CAMBIO_ESTADO'', ''ELIMINACION''))
+                    CHECK (accion IN (''CREACION'', ''CAMBIO_ESTADO'', ''ELIMINACION'',
+                        ''EDICION_DATOS'', ''EDICION_CONTACTOS'', ''EDICION_REPUESTOS''))
             )';
     END IF;
     SELECT COUNT(*) INTO cantidad FROM USER_INDEXES WHERE INDEX_NAME = 'IX_HISTORIAL_ORDENES_ORDEN';

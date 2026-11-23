@@ -64,6 +64,9 @@ class OrdenControllerTests {
             .thenAnswer(llamada -> llamada.getArgument(0));
 
         cliente.perform(post("/api/workorders")
+                .principal(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                        org.springframework.security.oauth2.jwt.Jwt.withTokenValue("local").header("alg", "RS256")
+                                .claim("oid", "usuario-prueba").claim("roles", List.of("Cliente")).build(), List.of()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
