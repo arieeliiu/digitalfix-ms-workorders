@@ -18,6 +18,7 @@ import cl.digitalfix.workorders.messaging.ContratosMensajeria.Sobre;
 @Component
 public class PublicadorKafka {
     public static final String TOPICO = "workorders.events";
+    public static final String TOPICO_EDICIONES = "audit.timeline";
 
     private final KafkaTemplate<String, String> template;
     private final Duration timeout;
@@ -33,7 +34,13 @@ public class PublicadorKafka {
     // Key = ordenId: todos los eventos de una orden van a la misma partición y se leen en orden.
     public RecordMetadata publicar(Long ordenId, Sobre sobre) {
         if (ordenId == null) throw new IllegalArgumentException("ordenId es obligatorio como key");
-        var registro = new ProducerRecord<String, String>(TOPICO, ordenId.toString(), json.writeValueAsString(sobre));
+        // Cada hecho tiene un solo destino: ciclo de vida o edición auditable.
+        String topico = switch (sobre.type()) {
+            case "ORDEN_CREADA", "ORDEN_ESTADO_CAMBIADO", "ORDEN_ELIMINADA" -> TOPICO;
+            case "ORDEN_DATOS_ACTUALIZADOS", "ORDEN_CONTACTOS_ACTUALIZADOS", "ORDEN_REPUESTOS_ACTUALIZADOS" -> TOPICO_EDICIONES;
+            default -> throw new IllegalArgumentException("Tipo de evento desconocido");
+        };
+        var registro = new ProducerRecord<String, String>(topico, ordenId.toString(), json.writeValueAsString(sobre));
         // Correlation ID en los headers para seguir el evento hasta el consumidor
         if (sobre.correlationId() != null)
             registro.headers().add("correlationId", sobre.correlationId().getBytes(StandardCharsets.UTF_8));

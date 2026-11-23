@@ -75,8 +75,11 @@ class EdicionAdminTests {
         var auth = token(rol, rol.equals("Admin") ? "otro" : "propietario");
         for (EstadoOrden estado : EstadoOrden.values()) {
             long id = orden(estado.name());
+            boolean activa = List.of(EstadoOrden.ASIGNADA, EstadoOrden.EN_DESPLAZAMIENTO,
+                    EstadoOrden.EN_EJECUCION).contains(estado);
+            int esperado = estado == EstadoOrden.CREADA ? 200 : activa ? (rol.equals("Cliente") ? 403 : 200) : 409;
             mvc.perform(put("/api/workorders/{id}", id).principal(auth).contentType("application/json").content(DATOS))
-                    .andExpect(status().is(estado == EstadoOrden.CREADA ? 200 : 409));
+                    .andExpect(status().is(esperado));
             mvc.perform(delete("/api/workorders/{id}", id).principal(auth))
                     .andExpect(status().is(estado == EstadoOrden.CREADA || estado == EstadoOrden.CANCELADA ? 204 : 409));
         }

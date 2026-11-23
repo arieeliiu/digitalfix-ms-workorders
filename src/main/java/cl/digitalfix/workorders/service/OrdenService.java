@@ -1,6 +1,7 @@
 package cl.digitalfix.workorders.service;
 
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ import cl.digitalfix.workorders.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.workorders.dto.response.HistorialOrdenResponse;
 import cl.digitalfix.workorders.dto.response.OrdenResponse;
 import cl.digitalfix.workorders.entity.EstadoOrden;
+import cl.digitalfix.workorders.entity.AccionHistorial;
 import cl.digitalfix.workorders.entity.OrdenTrabajo;
 import cl.digitalfix.workorders.entity.RepuestoOrden;
 import cl.digitalfix.workorders.mapper.OrdenMapper;
@@ -43,11 +45,16 @@ public class OrdenService {
     // Mantiene la firma anterior para llamadas internas y pruebas existentes.
     @Transactional
     public OrdenResponse crearOrden(NuevaOrdenRequest solicitud) {
-        return crearOrden(solicitud, null);
+        return crearOrden(solicitud, (String) null);
     }
 
     @Transactional
     public OrdenResponse crearOrden(NuevaOrdenRequest solicitud, String actorRoles) {
+        return crearOrden(solicitud, new ActorAuditoria(solicitud.solicitanteId().trim(), actorRoles));
+    }
+
+    @Transactional
+    public OrdenResponse crearOrden(NuevaOrdenRequest solicitud, ActorAuditoria auditor) {
         exigirCorreo(solicitud.emailContacto());
         var orden = new OrdenTrabajo(
                 solicitud.servicioId(),
@@ -58,7 +65,7 @@ public class OrdenService {
 
         orden.actualizarContactos(solicitud.emailContacto(), null);
         var guardada = repositorio.save(orden);
-        historial.registrarCreacion(guardada.getId(), guardada.getSolicitanteId(), actorRoles);
+        historial.registrarCreacion(guardada.getId(), auditor.id(), auditor.roles());
         return respuesta(guardada);
     }
 
@@ -103,6 +110,13 @@ public class OrdenService {
             Long id,
             ActualizarOrdenRequest datos,
             String solicitanteId, boolean esAdmin, boolean gestor) {
+        return actualizarOrden(id, datos, new ActorAuditoria(solicitanteId, null), esAdmin, gestor);
+    }
+
+    @Transactional
+    public OrdenResponse actualizarOrden(Long id, ActualizarOrdenRequest datos,
+            ActorAuditoria auditor, boolean esAdmin, boolean gestor) {
+        String solicitanteId = auditor.id();
 
         var orden = ordenParaGestionar(id, solicitanteId, esAdmin || gestor);
         boolean creada = "CREADA".equals(orden.getEstado());
@@ -118,12 +132,16 @@ public class OrdenService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Se requiere rol Admin u Operador para editar una orden asignada");
 
+        // Guardar los mismos valores normalizados no representa una edición nueva.
+        if (Objects.equals(orden.getServicioId(), datos.servicioId())
+                && Objects.equals(orden.getDescripcion(), datos.descripcion().trim())
+                && Objects.equals(orden.getDireccion(), datos.direccion().trim())) return respuesta(orden);
         orden.actualizar(
                 datos.servicioId(),
                 datos.descripcion().trim(),
                 datos.direccion().trim(),
                 solicitanteId);
-
+        historial.registrarEdicion(orden, AccionHistorial.EDICION_DATOS, auditor);
         return respuesta(repositorio.save(orden));
     }
 
@@ -247,13 +265,26 @@ public class OrdenService {
     public OrdenResponse actualizarContactos(Long id,
             ContactosRequest datos,
             String actorId, boolean gestor) {
+        return actualizarContactos(id, datos, new ActorAuditoria(actorId, null), gestor);
+    }
+
+    @Transactional
+    public OrdenResponse actualizarContactos(Long id, ContactosRequest datos,
+            ActorAuditoria auditor, boolean gestor) {
+        String actorId = auditor.id();
         var orden = ordenParaGestionar(id, actorId, gestor);
         if (!gestor && datos.emailTecnico() != null)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El correo del técnico requiere gestión de órdenes");
         if (datos.emailContacto() != null) exigirCorreo(datos.emailContacto());
         if (datos.emailTecnico() != null && (orden.getTecnicoId() != null || !datos.emailTecnico().isEmpty()))
             exigirCorreo(datos.emailTecnico());
+        boolean cambiaContacto = datos.emailContacto() != null
+                && !Objects.equals(orden.getEmailContacto(), normalizarContacto(datos.emailContacto()));
+        boolean cambiaTecnico = datos.emailTecnico() != null
+                && !Objects.equals(orden.getEmailTecnico(), normalizarContacto(datos.emailTecnico()));
+        if (!cambiaContacto && !cambiaTecnico) return respuesta(orden);
         orden.actualizarContactos(datos.emailContacto(), datos.emailTecnico());
+        historial.registrarEdicion(orden, AccionHistorial.EDICION_CONTACTOS, auditor);
         return respuesta(repositorio.save(orden));
     }
 
@@ -262,6 +293,13 @@ public class OrdenService {
     @Transactional
     public OrdenResponse actualizarRepuestos(Long id, ActualizarRepuestosRequest solicitud,
             String actorId, boolean gestor) {
+        return actualizarRepuestos(id, solicitud, new ActorAuditoria(actorId, null), gestor);
+    }
+
+    @Transactional
+    public OrdenResponse actualizarRepuestos(Long id, ActualizarRepuestosRequest solicitud,
+            ActorAuditoria auditor, boolean gestor) {
+        String actorId = auditor.id();
         if (!gestor) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         var orden = ordenParaGestionar(id, actorId, true);
         var estado = EstadoOrden.valueOf(orden.getEstado());
@@ -283,7 +321,12 @@ public class OrdenService {
         catalogCliente.ajustarStock(id, new ActualizarRepuestosRequest(previos, destino));
         var entidades = destino.stream().map(r -> new RepuestoOrden(r.repuestoId(), r.cantidad())).toList();
         orden.actualizarRepuestos(entidades, actorId);
+        historial.registrarEdicion(orden, AccionHistorial.EDICION_REPUESTOS, auditor);
         return respuesta(repositorio.save(orden));
+    }
+
+    private String normalizarContacto(String valor) {
+        return valor.isBlank() ? null : valor.trim();
     }
 
     private Map<Long, Integer> normalizarRepuestos(List<RepuestoRequest> lista) {

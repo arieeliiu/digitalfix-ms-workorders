@@ -48,7 +48,10 @@ public class OrdenController {
             @Valid @RequestBody NuevaOrdenRequest solicitud,
             JwtAuthenticationToken autenticacion) {
 
-        return servicio.crearOrden(solicitud, rolesAuditoria(autenticacion));
+        var actor = new ActorAuditoria(actorAutenticado(autenticacion), rolesAuditoria(autenticacion));
+        if (!esAdmin(autenticacion) && !actor.id().equals(solicitud.solicitanteId().trim()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes crear órdenes a nombre de otro usuario");
+        return servicio.crearOrden(solicitud, actor);
     }
 
     // Trazabilidad de la orden (creación, cambios de estado y eliminación).
@@ -92,7 +95,7 @@ public class OrdenController {
         return servicio.actualizarOrden(
                 id,
                 solicitud,
-                actorAutenticado(autenticacion), esAdmin(autenticacion),
+                new ActorAuditoria(actorAutenticado(autenticacion), rolesAuditoria(autenticacion)), esAdmin(autenticacion),
                 puedeGestionarOrdenes(autenticacion));
     }
 
@@ -105,13 +108,14 @@ public class OrdenController {
 
         // El historial toma el actor del JWT (oid), no del query param.
         var auditor = new ActorAuditoria(
-                oidAuditoria(autenticacion, solicitanteId),
+                actorAutenticado(autenticacion),
                 rolesAuditoria(autenticacion));
 
         return servicio.cambiarEstado(
                 id,
                 solicitud,
-                solicitanteId,
+                // El parámetro se conserva por compatibilidad; no concede propiedad sobre la orden.
+                auditor.id(),
                 puedeGestionarOrdenes(autenticacion),
                 auditor);
     }
@@ -126,12 +130,6 @@ public class OrdenController {
                 id,
                 actorAutenticado(autenticacion), esAdmin(autenticacion),
                 rolesAuditoria(autenticacion));
-    }
-
-    private String oidAuditoria(JwtAuthenticationToken autenticacion, String respaldo) {
-        if (autenticacion == null) return respaldo;
-        String oid = autenticacion.getToken().getClaimAsString("oid");
-        return oid == null || oid.isBlank() || oid.length() > 100 ? respaldo : oid;
     }
 
     private String rolesAuditoria(JwtAuthenticationToken autenticacion) {
@@ -174,7 +172,8 @@ public class OrdenController {
             @Valid @RequestBody ActualizarRepuestosRequest solicitud,
             JwtAuthenticationToken autenticacion) {
         return servicio.actualizarRepuestos(id, solicitud,
-                actorAutenticado(autenticacion), puedeGestionarOrdenes(autenticacion));
+                new ActorAuditoria(actorAutenticado(autenticacion), rolesAuditoria(autenticacion)),
+                puedeGestionarOrdenes(autenticacion));
     }
 
     @PatchMapping("/{id}/contactos")
@@ -186,6 +185,8 @@ public class OrdenController {
         String oid = autenticacion.getToken().getClaimAsString("oid");
         if (oid == null || oid.isBlank())
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        return servicio.actualizarContactos(id, solicitud, oid, puedeGestionarOrdenes(autenticacion));
+        return servicio.actualizarContactos(id, solicitud,
+                new ActorAuditoria(actorAutenticado(autenticacion), rolesAuditoria(autenticacion)),
+                puedeGestionarOrdenes(autenticacion));
     }
 }

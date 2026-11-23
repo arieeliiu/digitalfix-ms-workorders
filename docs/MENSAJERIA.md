@@ -111,7 +111,7 @@ El script lee credenciales de Infra en memoria, pasa un archivo de entorno local
 
 ## Eventos Kafka (workorders.events)
 
-Además de los comandos RabbitMQ, Workorders publica **eventos**: hechos ya ocurridos que leen varios consumidores (ms-audit y ms-report, cada uno con su `group.id`). El clúster y los tópicos están en `digitalfix-infra/kafka`.
+Además de los comandos RabbitMQ, Workorders publica **eventos**: hechos ya ocurridos que consume Audit (grupo `audit`). Report conserva sus comandos RabbitMQ; no existe un consumidor Kafka de Report. El clúster y los tópicos están en `digitalfix-infra/kafka`.
 
 | Elemento | Valor |
 |---|---|
@@ -129,7 +129,44 @@ Además de los comandos RabbitMQ, Workorders publica **eventos**: hechos ya ocur
 | `ORDEN_ESTADO_CAMBIADO` | Cada transición real | anterior → nuevo |
 | `ORDEN_ELIMINADA` | Al eliminar (CREADA o CANCELADA) | estado final → `null` |
 
-**Payload `EventoOrden`:** `ordenId`, `accion` (`CREACION`, `CAMBIO_ESTADO`, `ELIMINACION`), `estadoAnterior`, `estadoNuevo`, `tecnicoId`, `actorId` (oid de Entra), `actorRoles` y `fecha`. No incluye correos ni descripciones.
+Las ediciones reales se publican únicamente en `audit.timeline` (3 particiones,
+RF 3, `delete`, 30 días), con el mismo sobre/payload 1.0 y key `ordenId`:
+
+| `type` | Acción | Operación |
+|---|---|---|
+| `ORDEN_DATOS_ACTUALIZADOS` | `EDICION_DATOS` | PUT de datos de la orden |
+| `ORDEN_CONTACTOS_ACTUALIZADOS` | `EDICION_CONTACTOS` | PATCH de contactos |
+| `ORDEN_REPUESTOS_ACTUALIZADOS` | `EDICION_REPUESTOS` | PUT de repuestos |
+
+En una edición los estados anterior/nuevo son iguales. Se compara el estado
+normalizado antes de guardar: no-op, reintentos ya aplicados y rollback no producen
+eventos. Los contactos/repuestos de una asignación forman parte de la transición,
+sin eventos de edición adicionales. No se envían valores de correos ni otros datos
+personales. El actor y roles de HTTP se obtienen del JWT; no se usa el query param
+como respaldo de un `oid` ausente, tampoco al cambiar estado o crear la orden.
+La propiedad usada para autorizar un cambio de estado también se deriva del JWT;
+un Cliente no puede usar el query param para actuar sobre una orden ajena ni crear
+una orden a nombre de otra persona. Admin conserva la creación por cuenta de otros.
+
+**Orden de activación:** Infra PR #17, lector Audit compatible y finalmente este
+productor. El lector anterior rechaza los tipos nuevos. El historial Oracle requiere
+ampliar su check de acciones: para instalación nueva se actualizó `oracle-historial.sql`;
+para una existente se preparó `oracle-historial-ediciones.sql`. Revisar todos los checks
+(incluidos los generados por Hibernate) y la definición de un V2 ya existente antes de
+ejecutar. Los scripts no se aplicaron ni se verificaron contra Oracle en esta tarea.
+
+Prueba optativa contra **Kafka local aislado**, con H2 real y Catalog simulado:
+
+```powershell
+.\mvnw.cmd -B '-Dtest=KafkaEdicionesRealTests' '-Ddigitalfix.pruebas.kafka=true' test
+```
+
+Produce datos sintéticos en ambos tópicos del clúster indicado; no ejecutarla contra
+datos de negocio. Se comprobó creación/transición y las tres ediciones, orden por key,
+ausencia de eventos duplicados por no-op y ausencia de emisión ante rollback.
+No certifica Oracle, JWT de Entra ni el stock del Catalog real.
+
+**Payload `EventoOrden`:** `ordenId`, `accion` (según las tablas anteriores), `estadoAnterior`, `estadoNuevo`, `tecnicoId`, `actorId` (oid de Entra), `actorRoles` y `fecha`. No incluye correos ni descripciones.
 
 ```json
 {"schemaVersion":"1.0","type":"ORDEN_ESTADO_CAMBIADO","eventId":"bc8d4a43-...","timestamp":"2026-11-23T03:42:49.230956900Z",

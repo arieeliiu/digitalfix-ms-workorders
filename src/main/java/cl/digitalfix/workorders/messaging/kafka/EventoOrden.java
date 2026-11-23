@@ -20,6 +20,9 @@ public record EventoOrden(Long ordenId, String accion, String estadoAnterior, St
             case "CREACION" -> "ORDEN_CREADA";
             case "CAMBIO_ESTADO" -> "ORDEN_ESTADO_CAMBIADO";
             case "ELIMINACION" -> "ORDEN_ELIMINADA";
+            case "EDICION_DATOS" -> "ORDEN_DATOS_ACTUALIZADOS";
+            case "EDICION_CONTACTOS" -> "ORDEN_CONTACTOS_ACTUALIZADOS";
+            case "EDICION_REPUESTOS" -> "ORDEN_REPUESTOS_ACTUALIZADOS";
             default -> throw new IllegalArgumentException("Acción sin evento: " + accion);
         };
     }
