@@ -144,6 +144,9 @@ eventos. Los contactos/repuestos de una asignación forman parte de la transici�
 sin eventos de edición adicionales. No se envían valores de correos ni otros datos
 personales. El actor y roles de HTTP se obtienen del JWT; no se usa el query param
 como respaldo de un `oid` ausente, tampoco al cambiar estado o crear la orden.
+La propiedad usada para autorizar un cambio de estado también se deriva del JWT;
+un Cliente no puede usar el query param para actuar sobre una orden ajena ni crear
+una orden a nombre de otra persona. Admin conserva la creación por cuenta de otros.
 
 **Orden de activación:** Infra PR #17, lector Audit compatible y finalmente este
 productor. El lector anterior rechaza los tipos nuevos. El historial Oracle requiere

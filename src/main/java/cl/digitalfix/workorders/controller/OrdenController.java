@@ -48,8 +48,10 @@ public class OrdenController {
             @Valid @RequestBody NuevaOrdenRequest solicitud,
             JwtAuthenticationToken autenticacion) {
 
-        return servicio.crearOrden(solicitud,
-                new ActorAuditoria(actorAutenticado(autenticacion), rolesAuditoria(autenticacion)));
+        var actor = new ActorAuditoria(actorAutenticado(autenticacion), rolesAuditoria(autenticacion));
+        if (!esAdmin(autenticacion) && !actor.id().equals(solicitud.solicitanteId().trim()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes crear órdenes a nombre de otro usuario");
+        return servicio.crearOrden(solicitud, actor);
     }
 
     // Trazabilidad de la orden (creación, cambios de estado y eliminación).
@@ -112,7 +114,8 @@ public class OrdenController {
         return servicio.cambiarEstado(
                 id,
                 solicitud,
-                solicitanteId,
+                // El parámetro se conserva por compatibilidad; no concede propiedad sobre la orden.
+                auditor.id(),
                 puedeGestionarOrdenes(autenticacion),
                 auditor);
     }

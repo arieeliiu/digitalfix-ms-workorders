@@ -169,6 +169,24 @@ class HistorialOrdenTests {
         assertEquals(1, historial.consultar(id).size());
     }
 
+    @Test void unClienteNoPuedeUsarElPropietarioDelQueryParaCambiarUnaOrdenAjena() throws Exception {
+        long id = crear();
+        mvc.perform(put("/api/workorders/{id}/status", id)
+                        .principal(token("oid-ajeno", "Cliente"))
+                        .param("solicitanteId", "oid-cliente")
+                        .contentType("application/json").content("{\"status\":\"CANCELADA\"}"))
+                .andExpect(status().isNotFound());
+        assertEquals(1, historial.consultar(id).size());
+    }
+
+    @Test void unClienteNoPuedeCrearUnaOrdenANombreDeOtroUsuario() throws Exception {
+        mvc.perform(post("/api/workorders").principal(token("oid-ajeno", "Cliente"))
+                        .contentType("application/json")
+                        .content("{\"servicioId\":1,\"descripcion\":\"Revisión\",\"direccion\":\"Calle\","
+                                + "\"solicitanteId\":\"oid-cliente\",\"emailContacto\":\"cliente@example.org\"}"))
+                .andExpect(status().isForbidden());
+    }
+
     @Test void laCreacionRegistraActorJwtAunqueElPropietarioSeaOtro() throws Exception {
         mvc.perform(post("/api/workorders").principal(token("oid-admin", "Admin"))
                         .contentType("application/json")
